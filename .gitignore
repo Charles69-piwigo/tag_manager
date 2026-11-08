@@ -1,0 +1,21 @@
+# Doc interne, local uniquement
+dev/
+CLAUDE.md
+
+# Agent / IDE
+.claude/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Paquets générés
+*.zip
+
+# Script de génération des ZIP de release
+generate-release-zip.ps1
