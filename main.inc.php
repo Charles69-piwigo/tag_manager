@@ -11,6 +11,17 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.1 - 09/11/2026
+    le moteur réécrit les huit champs de mots-clés écrits par digiKam (dc:subject, lr:hierarchicalSubject, digiKam:TagsList, MicrosoftPhoto:LastKeywordXMP, mediapro:CatalogSets, acdsee:categories, IPTC 2:25, Exif XPKeywords) : renommer, déplacer ou supprimer un tag ne laisse plus l’ancien nom dans une partie des métadonnées
+    renommer ou ranger un tag qui a des tags dessous fait suivre leurs chemins ; supprimer ou fusionner un tel tag avertit avant d’appliquer
+    les entrées de personnes (Personnes|…) ne sont jamais modifiées, même quand un nom est à la fois un tag et une personne ; ces homonymes sont signalés dans « À réconcilier »
+    regroupe les versions 1.0.1 et 1.0.2
+
+version 1.0.2 - 09/11/2026
+    corrigé : un même nom porté à la fois par un tag normal et par une personne (ex. « Pic » : TAG_FAUNE|OISEAU|Pic et Personnes|Pic) : le moteur ne touche JAMAIS aux entrées sous une racine réservée (Personnes) ; les listes de feuilles (dc:subject, IPTC, XPKeywords) gardent le nom tant qu’une personne du fichier le porte
+    corrigé : acdsee:categories écrit comme attribut de rdf:Description (forme compacte d’Exiv2 / digiKam) n’était pas vu, donc jamais mis à jour
+    ajouté : l’indexation repère ces homonymes (table tag_manager_homonyms) et les signale dans « À réconcilier » sans rien modifier (analyse en profondeur, jusqu'à 40 photos, des tags déjà enregistrés par face_tag puis déverrouillés) ; elle n’écrase plus le chemin d’un tag par celui d’une personne
+
 version 1.0.1 - 09/11/2026
     corrigé : renommer / déplacer / supprimer un tag laissait l’ancien nom dans une partie des métadonnées du fichier. Le moteur réécrit maintenant les huit champs de mots-clés écrits par digiKam : dc:subject, lr:hierarchicalSubject, digiKam:TagsList, MicrosoftPhoto:LastKeywordXMP, mediapro:CatalogSets, acdsee:categories, IPTC 2:25 et Exif XPKeywords
     corrigé : MicrosoftPhoto:LastKeywordXMP n’était pas reconnu quand le fichier déclare l’espace de noms sans « / » final (forme écrite par ExifTool)
@@ -152,6 +163,7 @@ define('TAGMANAGER_ID', basename(dirname(__FILE__)));
 define('TAGMANAGER_PATH', PHPWG_PLUGINS_PATH . TAGMANAGER_ID . '/');
 define('TAGMANAGER_ADMIN', get_root_url() . 'admin.php?page=plugin-' . TAGMANAGER_ID);
 define('TAGMANAGER_PATHS_TABLE', $prefixeTable . 'tag_manager_paths');
+define('TAGMANAGER_HOMONYMS_TABLE', $prefixeTable . 'tag_manager_homonyms');
 define('TAGMANAGER_JOBS_TABLE', $prefixeTable . 'tag_manager_jobs');
 define('TAGMANAGER_JOBFILES_TABLE', $prefixeTable . 'tag_manager_job_files');
 

@@ -67,6 +67,23 @@ function tagmanager_xmp_find_node(DOMDocument $doc, array $f)
       }
     }
   }
+  // Forme compacte : la propriété est un attribut de rdf:Description (valeur simple seulement)
+  if ($f['kind'] === 'acdsee')
+  {
+    foreach ($doc->getElementsByTagNameNS(TAGMANAGER_NS_RDF, 'Description') as $d)
+    {
+      foreach ($f['ns'] as $ns)
+      {
+        foreach ($f['names'] as $n)
+        {
+          if ($d->hasAttributeNS($ns, $n))
+          {
+            return $d->getAttributeNodeNS($ns, $n);
+          }
+        }
+      }
+    }
+  }
   return null;
 }
 
@@ -157,6 +174,19 @@ function tagmanager_acdsee_encode(array $paths)
 // Opérations sur les listes
 // ---------------------------------------------------------------------------------------------
 
+/** Racines réservées (tags de visages) : le moteur n'y touche JAMAIS. Valeur par défaut hors Piwigo (tests). */
+function tagmanager_engine_roots()
+{
+  $r = function_exists('tagmanager_reserved_roots') ? tagmanager_reserved_roots() : array('Personnes');
+  return is_array($r) && !empty($r) ? $r : array('Personnes');
+}
+
+/** Ce chemin (liste de segments) est-il sous une racine réservée ? */
+function tagmanager_segs_protected(array $segs)
+{
+  return !empty($segs) && in_array($segs[0], tagmanager_engine_roots(), true);
+}
+
 function tagmanager_split($s, $sep)
 {
   return array_values(array_filter(array_map('trim', explode($sep, $s)), function ($x) { return $x !== ''; }));
@@ -232,6 +262,18 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
     {
       if ($kind === 'leaf')
       {
+        $mode = isset($op['leaf_mode']) ? $op['leaf_mode'] : 'normal';
+        if ($op['op'] === 'retag' && $s === $op['from'] && $mode !== 'normal')
+        {
+          // Le nom est aussi porté par une personne du fichier : on le garde (et, si l'oiseau
+          // change de nom, on ajoute le nouveau nom à côté).
+          $out[] = $s;
+          if ($mode === 'keep_add' && $op['to'] !== null)
+          {
+            $out[] = end($op['to']);
+          }
+          continue;
+        }
         $n = tagmanager_leaf_op($s, $op);
         if ($n !== null)
         {
@@ -240,6 +282,11 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
         continue;
       }
       $segs = tagmanager_split($s, $sep);
+      if (tagmanager_segs_protected($segs))
+      {
+        $out[] = $s; // entrée de personne : intacte
+        continue;
+      }
       $n = tagmanager_path_op($segs, $op);
       if ($n === null)
       {
@@ -267,6 +314,44 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
     $list = array_values(array_unique($out));
   }
   return $list;
+}
+
+/**
+ * Pour chaque opération retag, décide comment traiter les listes de FEUILLES (dc:subject, IPTC,
+ * XPKeywords) d'après les listes de chemins du fichier :
+ *   normal   : aucun chemin de personne ne porte ce nom
+ *   keep     : seul un chemin de personne le porte -> le fichier n'est pas concerné
+ *   keep_add : un chemin de personne ET un autre chemin le portent -> garder le nom, ajouter le nouveau
+ */
+function tagmanager_annotate_ops(array $L, array $ops)
+{
+  foreach ($ops as $i => $op)
+  {
+    if ($op['op'] !== 'retag')
+    {
+      continue;
+    }
+    $prot = false;
+    $other = false;
+    foreach (tagmanager_xmp_fields() as $k => $f)
+    {
+      if ($f['kind'] === 'leaf' || empty($L[$k]))
+      {
+        continue;
+      }
+      $sep = (tagmanager_list_kind($f) === 'hier') ? '|' : '/';
+      foreach ($L[$k] as $v)
+      {
+        $segs = tagmanager_split($v, $sep);
+        if (!empty($segs) && end($segs) === $op['from'])
+        {
+          if (tagmanager_segs_protected($segs)) { $prot = true; } else { $other = true; }
+        }
+      }
+    }
+    $ops[$i]['leaf_mode'] = !$prot ? 'normal' : ($other ? 'keep_add' : 'keep');
+  }
+  return $ops;
 }
 
 /**
@@ -392,7 +477,7 @@ function tagmanager_xmp_unmanaged_hits(DOMDocument $doc, array $managed, array $
   $check = array();
   foreach ($ops as $op)
   {
-    if ($op['op'] === 'retag' || $op['op'] === 'replace_prefix')
+    if (($op['op'] === 'retag' && (!isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix')
     {
       $check[] = $op;
     }
@@ -400,6 +485,25 @@ function tagmanager_xmp_unmanaged_hits(DOMDocument $doc, array $managed, array $
   if (empty($check))
   {
     return $hits;
+  }
+  foreach ($doc->getElementsByTagNameNS(TAGMANAGER_NS_RDF, 'Description') as $d)
+  {
+    foreach ($d->attributes as $at)
+    {
+      if ($at->namespaceURI === null || $at->namespaceURI === TAGMANAGER_NS_RDF || $at->namespaceURI === 'http://www.w3.org/2000/xmlns/'
+        || isset($managed[spl_object_id($at)]))
+      {
+        continue;
+      }
+      foreach ($check as $op)
+      {
+        if (tagmanager_value_is_stale($at->value, $op))
+        {
+          $hits[$at->nodeName] = true;
+          break;
+        }
+      }
+    }
   }
   foreach ($doc->getElementsByTagName('*') as $el)
   {
@@ -496,9 +600,13 @@ function tagmanager_stale_entries(array $lists, array $ops)
     $sep = ($kind === 'hier') ? '|' : '/';
     foreach ($list as $v)
     {
+      if ($kind !== 'leaf' && tagmanager_segs_protected(tagmanager_split($v, $sep)))
+      {
+        continue; // entrée de personne : jamais modifiée, jamais « périmée »
+      }
       foreach ($ops as $op)
       {
-        if ($op['op'] === 'retag' || $op['op'] === 'replace_prefix')
+        if (($op['op'] === 'retag' && ($kind !== 'leaf' || !isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix')
         {
           $segs = ($kind === 'leaf') ? array($v) : tagmanager_split($v, $sep);
           $stale = false;
@@ -530,7 +638,7 @@ function tagmanager_stale_entries(array $lists, array $ops)
  */
 function tagmanager_xmp_modify($packet, array $ops)
 {
-  $res = array('changed' => false, 'packet' => null, 'fields' => array(), 'warnings' => array(), 'error' => null);
+  $res = array('changed' => false, 'packet' => null, 'fields' => array(), 'warnings' => array(), 'error' => null, 'ops' => $ops);
 
   $doc = new DOMDocument();
   $doc->preserveWhiteSpace = true;
@@ -598,6 +706,9 @@ function tagmanager_xmp_modify($packet, array $ops)
     }
   }
 
+  $ops = tagmanager_annotate_ops($L, $ops);
+  $res['ops'] = $ops;
+
   // Filet de sécurité : une valeur périmée dans un champ hors registre est signalée
   foreach (tagmanager_xmp_unmanaged_hits($doc, $managed, $ops) as $hit)
   {
@@ -626,7 +737,14 @@ function tagmanager_xmp_modify($packet, array $ops)
     {
       if ($node)
       {
-        $node->parentNode->removeChild($node);
+        if ($node->nodeType === XML_ATTRIBUTE_NODE)
+        {
+          $node->ownerElement->removeAttributeNode($node);
+        }
+        else
+        {
+          $node->parentNode->removeChild($node);
+        }
       }
       continue;
     }
@@ -643,6 +761,11 @@ function tagmanager_xmp_modify($packet, array $ops)
       $desc0->appendChild($node);
     }
 
+    if ($f['kind'] === 'acdsee' && $node->nodeType === XML_ATTRIBUTE_NODE)
+    {
+      $node->value = htmlspecialchars(tagmanager_acdsee_encode($N[$k]), ENT_XML1 | ENT_COMPAT, 'UTF-8');
+      continue;
+    }
     if ($f['kind'] === 'acdsee')
     {
       while ($node->firstChild)
@@ -755,6 +878,7 @@ function tagmanager_write_file($path, array $ops, array $opt = array())
   }
   $res['warnings'] = array_merge($res['warnings'], $x['warnings']);
   $res['fields'] = $x['fields'];
+  $ops = $x['ops']; // annotées : un nom porté aussi par une personne du fichier est conservé
 
   // --- IPTC ---
   $ii = tagmanager_jpeg_find($data, $segs, 0xED, TAGMANAGER_PS_ID);

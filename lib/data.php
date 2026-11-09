@@ -41,6 +41,22 @@ function tagmanager_face_tag_ids()
   return $ids;
 }
 
+/**
+ * Identifiants des tags que face_tag / face_tag_editor ont enregistrés puis qui ont été
+ * déverrouillés (is_face_tag = 0) : ce sont les candidats aux homonymes personne / tag normal.
+ */
+function tagmanager_face_registry_unflagged_ids()
+{
+  global $prefixeTable;
+  $t = $prefixeTable . 'facetag_person_tags';
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\_', $t)) . '\';');
+  if (pwg_db_num_rows($r) === 0)
+  {
+    return array();
+  }
+  return array_map('intval', query2array('SELECT tag_id FROM `' . $t . '` WHERE is_face_tag = 0;', null, 'tag_id'));
+}
+
 /** Vrai si le tag relève des visages / personnes (donc pas de ce plugin). */
 function tagmanager_is_reserved($tag_id, $name, $path)
 {
@@ -518,6 +534,25 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
     }
 
     $out[] = $row;
+  }
+
+  // Homonymes : un tag normal dont le nom est aussi celui d'une personne. Rien n'est modifié :
+  // le moteur ignore les entrées Personnes|... ; on signale seulement pour que l'utilisateur tranche.
+  tagmanager_ensure_homonym_table();
+  foreach (query2array('
+SELECT t.id, t.name, h.person_path,
+       (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id WHERE it.tag_id = t.id) AS n
+  FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' h JOIN ' . TAGS_TABLE . ' t ON t.id = h.tag_id
+  ORDER BY t.name
+;') as $h)
+  {
+    if (tagmanager_is_reserved($h['id'], $h['name'], null))
+    {
+      continue;
+    }
+    $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'homonym',
+      'why' => 'Homonyme : « ' . $h['name'] . ' » est aussi une personne (' . str_replace('|', ' › ', $h['person_path']) . '). Le plugin ne touche jamais à l\'entrée de la personne ; Piwigo ne sait pas distinguer les deux. Pour les séparer, renommez l\'un des deux dans digiKam.',
+      'act' => 'skip', 'target' => '', 'conf' => 'faible');
   }
 
   return $out;

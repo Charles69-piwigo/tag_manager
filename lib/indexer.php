@@ -46,6 +46,35 @@ ON DUPLICATE KEY UPDATE
 ;');
 }
 
+/** Table des homonymes : un tag normal dont le nom est aussi celui d'une personne (Personnes|nom). */
+function tagmanager_ensure_homonym_table()
+{
+  pwg_query('
+CREATE TABLE IF NOT EXISTS `' . TAGMANAGER_HOMONYMS_TABLE . '` (
+  `tag_id`          INT UNSIGNED NOT NULL,
+  `person_path`     VARCHAR(500) NOT NULL,
+  `sample_image_id` INT UNSIGNED NULL,
+  `indexed_at`      INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
+}
+
+function tagmanager_record_homonym($tag_id, $person_path, $image_id, $now)
+{
+  pwg_query('
+INSERT INTO ' . TAGMANAGER_HOMONYMS_TABLE . ' (tag_id, person_path, sample_image_id, indexed_at)
+VALUES (' . intval($tag_id) . ', \'' . pwg_db_real_escape_string($person_path) . '\', ' . ($image_id ? intval($image_id) : 'NULL') . ', ' . intval($now) . ')
+ON DUPLICATE KEY UPDATE person_path = VALUES(person_path), sample_image_id = VALUES(sample_image_id), indexed_at = VALUES(indexed_at)
+;');
+}
+
+/** Le tag a-t-il déjà un chemin valide HORS des racines réservées ? */
+function tagmanager_has_normal_path($tag_id)
+{
+  $r = pwg_db_fetch_assoc(pwg_query('SELECT path FROM ' . TAGMANAGER_PATHS_TABLE . ' WHERE kind = \'tag\' AND tag_id = ' . intval($tag_id) . ' AND status = \'ok\';'));
+  return $r && !tagmanager_is_reserved_root($r['path']);
+}
+
 /**
  * Traite un lot de tags (ordre croissant des identifiants, au-delà de $last_id).
  *
@@ -76,6 +105,13 @@ SELECT t.id, t.name
 
   $out = array('processed' => 0, 'last_id' => (int)$last_id, 'done' => false, 'ok' => 0, 'flat' => 0, 'nofile' => 0, 'reads' => 0);
   $now = time();
+  $deep_ids = tagmanager_face_registry_unflagged_ids(); // candidats aux homonymes : analyse en profondeur
+
+  tagmanager_ensure_homonym_table();
+  if (intval($last_id) === 0)
+  {
+    pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ';'); // début d'une indexation : on repart de zéro
+  }
 
   foreach ($tags as $tag)
   {
@@ -87,7 +123,8 @@ SELECT t.id, t.name
 SELECT COUNT(*) FROM ' . TAGMANAGER_PATHS_TABLE . '
   WHERE tag_id = ' . intval($tag['id']) . ' AND indexed_at >= ' . intval($run) . '
 ;'));
-    if ((int)$known[0] > 0)
+    $deep = in_array((int)$tag['id'], $deep_ids, true);
+    if ((int)$known[0] > 0 && !$deep)
     {
       $out['ok']++;
       continue;
@@ -105,7 +142,7 @@ SELECT image_id
   ORDER BY image_id
 ;', null, 'image_id');
     $count = count($all_ids);
-    $take = min(TAGMANAGER_SAMPLE, $count);
+    $take = min($deep ? 40 : TAGMANAGER_SAMPLE, $count);
     $pick = array();
     for ($k = 0; $k < $take; $k++)
     {
@@ -134,22 +171,43 @@ SELECT id, path
       $out['reads']++;
       $sample = $img['id'];
 
+      // Chemins du fichier, par nom : « normal » (hors racines réservées) et « personne » (Personnes|...)
+      $per_leaf = array();
       foreach ($paths as $p)
       {
         $leaf = tagmanager_norm(end($p));
         if (isset($by_name[$leaf]) && count($p) > 0)
         {
-          tagmanager_upsert_tag_path($by_name[$leaf], implode('|', $p), $img['id'], 'ok', $now);
-          if ($leaf === $wanted)
+          $per_leaf[$leaf][tagmanager_is_reserved_root(implode('|', $p)) ? 'person' : 'normal'] = implode('|', $p);
+        }
+      }
+      foreach ($per_leaf as $leaf => $k)
+      {
+        $tid = $by_name[$leaf];
+        if (isset($k['normal']))
+        {
+          tagmanager_upsert_tag_path($tid, $k['normal'], $img['id'], 'ok', $now);
+          if (isset($k['person']))
           {
-            $found = true;
+            tagmanager_record_homonym($tid, $k['person'], $img['id'], $now); // le nom est aussi celui d'une personne
           }
+          if ($leaf === $wanted) { $found = true; }
+        }
+        elseif (tagmanager_has_normal_path($tid))
+        {
+          // Fichier où seule la personne porte ce nom : on ne touche pas au chemin du tag normal
+          tagmanager_record_homonym($tid, $k['person'], $img['id'], $now);
+        }
+        else
+        {
+          tagmanager_upsert_tag_path($tid, $k['person'], $img['id'], 'ok', $now); // tag de personne pur
+          if ($leaf === $wanted) { $found = true; }
         }
       }
 
-      if ($found)
+      if ($found && !$deep)
       {
-        break;
+        break; // sauf analyse en profondeur : on lit tous les fichiers choisis pour repérer une personne homonyme
       }
     }
 
