@@ -5,6 +5,7 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/names.php');
 include_once(dirname(__FILE__) . '/file_resolver.php');
 include_once(dirname(__FILE__) . '/xmp_reader.php');
 
@@ -422,8 +423,7 @@ SELECT i.storage_category_id AS alb, COUNT(DISTINCT i.id) AS n
 
 function tagmanager_norm_cmp($s)
 {
-  $s = function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
-  return trim(preg_replace('/\s+/', ' ', $s));
+  return trim(preg_replace('/\s+/', ' ', tagmanager_fold($s)));
 }
 
 /**
@@ -473,12 +473,24 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
     $row = array('id' => (int)$r['id'], 'name' => $name, 'n' => $n, 'status' => $r['status'],
       'why' => '', 'act' => 'skip', 'target' => '', 'conf' => 'faible');
 
-    // Noms de dernier niveau présents dans le fichier témoin
+    // Noms de dernier niveau présents dans les fichiers témoins : jusqu'à 6 photos du tag, réparties
+    // sur toute la liste (un seul fichier peut n'avoir aucun chemin alors que d'autres l'ont)
     $file_leaves = array();
-    if ($r['status'] === 'flat' && $r['sample_image_id'])
+    if ($r['status'] === 'flat')
     {
-      $img = pwg_db_fetch_assoc(pwg_query('SELECT path FROM ' . IMAGES_TABLE . ' WHERE id = ' . intval($r['sample_image_id']) . ';'));
-      if ($img)
+      $ids = query2array('SELECT image_id FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($r['id']) . ' ORDER BY image_id;', null, 'image_id');
+      $pick = array();
+      $cnt = count($ids);
+      $take = min(6, $cnt);
+      for ($k = 0; $k < $take; $k++)
+      {
+        $pick[] = intval($ids[(int)floor($k * $cnt / $take)]);
+      }
+      if ($r['sample_image_id'] && !in_array((int)$r['sample_image_id'], $pick, true))
+      {
+        $pick[] = (int)$r['sample_image_id'];
+      }
+      foreach (empty($pick) ? array() : query2array('SELECT path FROM ' . IMAGES_TABLE . ' WHERE id IN (' . implode(',', $pick) . ');') as $img)
       {
         $paths = tagmanager_read_hierarchy(tagmanager_resolve_path($img['path']));
         if ($paths)
@@ -489,6 +501,7 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
           }
         }
       }
+      $file_leaves = array_values(array_unique($file_leaves));
     }
 
     // Candidat le plus proche, parmi les tags valides puis les noms lus dans le fichier

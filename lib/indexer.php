@@ -10,15 +10,17 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(TAGMANAGER_PATH . 'lib/names.php');
 include_once(TAGMANAGER_PATH . 'lib/file_resolver.php');
 include_once(TAGMANAGER_PATH . 'lib/xmp_reader.php');
 
 // Nombre maximal de photos testées par tag avant de le déclarer « à plat » ou « introuvable »
 define('TAGMANAGER_SAMPLE', 8);
 
+/** Forme de comparaison d'un nom : comme Piwigo, sans casse ni accents (voir names.php). */
 function tagmanager_norm($s)
 {
-  return mb_strtolower(trim((string)$s), 'UTF-8');
+  return tagmanager_fold($s);
 }
 
 /** Tags qui ont au moins une photo. */
@@ -88,10 +90,12 @@ function tagmanager_index_batch($last_id, $run, $limit = 20)
   @set_time_limit(60);
 
   $by_name = array();
+  $name_of = array();
   $res = pwg_query('SELECT id, name FROM ' . TAGS_TABLE . ';');
   while ($r = pwg_db_fetch_assoc($res))
   {
     $by_name[tagmanager_norm($r['name'])] = (int)$r['id'];
+    $name_of[(int)$r['id']] = $r['name'];
   }
 
   $tags = query2array('
@@ -178,6 +182,7 @@ SELECT id, path
         $leaf = tagmanager_norm(end($p));
         if (isset($by_name[$leaf]) && count($p) > 0)
         {
+          $p[count($p) - 1] = $name_of[$by_name[$leaf]]; // orthographe de Piwigo (le fichier peut différer d'un accent ou d'une majuscule)
           $per_leaf[$leaf][tagmanager_is_reserved_root(implode('|', $p)) ? 'person' : 'normal'] = implode('|', $p);
         }
       }
@@ -191,7 +196,7 @@ SELECT id, path
           {
             tagmanager_record_homonym($tid, $k['person'], $img['id'], $now); // le nom est aussi celui d'une personne
           }
-          if ($leaf === $wanted) { $found = true; }
+          if ((string)$leaf === $wanted) { $found = true; }
         }
         elseif (tagmanager_has_normal_path($tid))
         {
@@ -201,7 +206,7 @@ SELECT id, path
         else
         {
           tagmanager_upsert_tag_path($tid, $k['person'], $img['id'], 'ok', $now); // tag de personne pur
-          if ($leaf === $wanted) { $found = true; }
+          if ((string)$leaf === $wanted) { $found = true; }
         }
       }
 

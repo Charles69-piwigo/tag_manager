@@ -20,6 +20,7 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/names.php');
 include_once(dirname(__FILE__) . '/xmp_reader.php');
 include_once(dirname(__FILE__) . '/jpeg.php');
 include_once(dirname(__FILE__) . '/exif_keywords.php');
@@ -197,7 +198,7 @@ function tagmanager_path_op(array $segs, array $op)
 {
   if ($op['op'] === 'retag')
   {
-    if (!empty($segs) && end($segs) === $op['from'])
+    if (!empty($segs) && tagmanager_same_name(end($segs), $op['from']))
     {
       return $op['to'] === null ? null : $op['to'];
     }
@@ -205,7 +206,7 @@ function tagmanager_path_op(array $segs, array $op)
   elseif ($op['op'] === 'replace_prefix')
   {
     $k = count($op['from']);
-    if ($k > 0 && count($segs) >= $k && array_slice($segs, 0, $k) === $op['from'])
+    if (tagmanager_segs_start_with($segs, $op['from']))
     {
       return array_merge($op['to'], array_slice($segs, $k));
     }
@@ -216,7 +217,7 @@ function tagmanager_path_op(array $segs, array $op)
 /** @return string|null */
 function tagmanager_leaf_op($leaf, array $op)
 {
-  if ($op['op'] === 'retag' && $leaf === $op['from'])
+  if ($op['op'] === 'retag' && tagmanager_same_name($leaf, $op['from']))
   {
     return $op['to'] === null ? null : end($op['to']);
   }
@@ -227,7 +228,7 @@ function tagmanager_has_path(array $list, $sep, array $path)
 {
   foreach ($list as $s)
   {
-    if (tagmanager_split($s, $sep) === $path)
+    if (tagmanager_same_segs(tagmanager_split($s, $sep), $path))
     {
       return true;
     }
@@ -240,7 +241,7 @@ function tagmanager_has_leaf_path(array $list, $sep, $leaf)
   foreach ($list as $s)
   {
     $segs = tagmanager_split($s, $sep);
-    if (!empty($segs) && end($segs) === $leaf)
+    if (!empty($segs) && tagmanager_same_name(end($segs), $leaf))
     {
       return true;
     }
@@ -263,7 +264,7 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
       if ($kind === 'leaf')
       {
         $mode = isset($op['leaf_mode']) ? $op['leaf_mode'] : 'normal';
-        if ($op['op'] === 'retag' && $s === $op['from'] && $mode !== 'normal')
+        if ($op['op'] === 'retag' && tagmanager_same_name($s, $op['from']) && $mode !== 'normal')
         {
           // Le nom est aussi porté par une personne du fichier : on le garde (et, si l'oiseau
           // change de nom, on ajoute le nouveau nom à côté).
@@ -300,7 +301,7 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
       if ($kind === 'leaf')
       {
         $leaf = end($op['path']);
-        if (!in_array($leaf, $out, true))
+        if (!tagmanager_in_names($leaf, $out))
         {
           $out[] = $leaf;
         }
@@ -343,7 +344,7 @@ function tagmanager_annotate_ops(array $L, array $ops)
       foreach ($L[$k] as $v)
       {
         $segs = tagmanager_split($v, $sep);
-        if (!empty($segs) && end($segs) === $op['from'])
+        if (!empty($segs) && tagmanager_same_name(end($segs), $op['from']))
         {
           if (tagmanager_segs_protected($segs)) { $prot = true; } else { $other = true; }
         }
@@ -374,7 +375,7 @@ function tagmanager_lists_apply(array $L, array $ops)
     if ($op['op'] === 'retag' && !empty($op['ensure']) && !empty($op['to']))
     {
       $leaf = end($op['to']);
-      if (in_array($leaf, $L['leaf'], true))
+      if (tagmanager_in_names($leaf, $L['leaf']))
       {
         foreach ($fields as $k => $f)
         {
@@ -431,7 +432,7 @@ function tagmanager_value_is_stale($t, array $op)
   }
   if ($op['op'] === 'retag')
   {
-    $same = ($op['to'] !== null && end($op['to']) === $op['from']);
+    $same = ($op['to'] !== null && tagmanager_same_name(end($op['to']), $op['from']));
     if ($same)
     {
       return false;
@@ -445,19 +446,19 @@ function tagmanager_value_is_stale($t, array $op)
         $c[] = end($segs);
       }
     }
-    return in_array($op['from'], $c, true);
+    return tagmanager_in_names($op['from'], $c);
   }
   if ($op['op'] === 'replace_prefix')
   {
     $k = count($op['from']);
-    if ($k > 0 && array_slice($op['to'], 0, $k) === $op['from'])
+    if ($k > 0 && tagmanager_segs_start_with($op['to'], $op['from']))
     {
       return false;
     }
     foreach (array('|', '/') as $sep)
     {
       $segs = tagmanager_split($t, $sep);
-      if ($k > 0 && count($segs) >= $k && array_slice($segs, 0, $k) === $op['from'])
+      if (tagmanager_segs_start_with($segs, $op['from']))
       {
         return true;
       }
@@ -612,8 +613,15 @@ function tagmanager_stale_entries(array $lists, array $ops)
           $stale = false;
           if ($op['op'] === 'retag')
           {
-            $stale = !empty($segs) && end($segs) === $op['from']
-              && !($op['to'] !== null && end($op['to']) === $op['from']);
+            $stale = !empty($segs) && tagmanager_same_name(end($segs), $op['from'])
+              && !($op['to'] !== null && tagmanager_same_name(end($op['to']), $op['from']));
+            // IPTC 2:25 est limité à 64 octets : le nouveau nom y est coupé, et la valeur coupée peut être
+            // identique à l'ancien nom (ex. « … (Siem » pour « … (Siem Reap) »). Ce n'est pas un reste.
+            if ($stale && $k === 'iptc' && $op['to'] !== null
+              && tagmanager_same_name($v, rtrim(tagmanager_utf8_cut(end($op['to']), 64))))
+            {
+              $stale = false;
+            }
           }
           else
           {
@@ -1102,6 +1110,21 @@ function tagmanager_stale_in_file($out, array $segs, array $ops)
 /** Paquet XMP d'un JPEG déjà en mémoire (même logique que tagmanager_read_xmp_packet). */
 function tagmanager_read_xmp_packet_from_string($d)
 {
+  if (substr($d, 0, 2) === "\xFF\xD8")
+  {
+    // JPEG entier : segment XMP standard (jamais le premier <x:xmpmeta venu, voir xmp_reader.php)
+    $j = tagmanager_jpeg_parse($d);
+    if ($j !== null)
+    {
+      $i = tagmanager_jpeg_find($d, $j['segs'], 0xE1, TAGMANAGER_XMP_ID);
+      if ($i < 0)
+      {
+        return null;
+      }
+      $l = strlen(TAGMANAGER_XMP_ID);
+      return tagmanager_xmpmeta_in(substr($d, $j['segs'][$i]['p'] + $l, $j['segs'][$i]['e'] - $j['segs'][$i]['p'] - $l));
+    }
+  }
   $s = strpos($d, '<x:xmpmeta');
   if ($s === false)
   {

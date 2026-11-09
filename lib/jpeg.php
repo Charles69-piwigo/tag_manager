@@ -377,7 +377,7 @@ function tagmanager_iptc_modify($payload, array $ops, &$warnings)
   {
     if ($utf8_out || !preg_match('/[\x80-\xFF]/', $k))
     {
-      $values[] = tagmanager_utf8_cut($k, 64);
+      $values[] = rtrim(tagmanager_utf8_cut($k, 64)); // sans espace final laissé par la coupure
     }
     else
     {
@@ -387,12 +387,27 @@ function tagmanager_iptc_modify($payload, array $ops, &$warnings)
         $warnings[] = 'iptc_encodage';
         return null;
       }
-      $values[] = substr($l1, 0, 64);
+      $values[] = rtrim(substr($l1, 0, 64));
     }
   }
   if (count($values) !== count(array_unique($values)))
   {
     $values = array_values(array_unique($values));
+  }
+
+  // Après coupure à 64 octets, la liste peut être identique à l'existante (ex. nom complet « … (Siem Reap) »
+  // coupé en « … (Siem », déjà présent) : aucune réécriture dans ce cas.
+  if (($utf8_out || !$eightbit) && !$add_flag)
+  {
+    $cut_current = array();
+    foreach ($current as $c)
+    {
+      $cut_current[] = rtrim(tagmanager_utf8_cut($c, 64));
+    }
+    if ($values === array_values(array_unique($cut_current)))
+    {
+      return null;
+    }
   }
 
   // Reconstruction : on retire les 2:25 existants et on insère les nouveaux à leur place triée
