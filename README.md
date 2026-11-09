@@ -17,7 +17,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 - **Étiqueter** : navigation par albums physiques (répertoires) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ».
 - **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; créer un tag ou un groupe ; supprimer un groupe vide. Chaque opération passe par un aperçu chiffré calculé par le serveur.
 - **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier.
-- **Moteur d'écriture sans recompression** : seuls les segments XMP (APP1) et IPTC (APP13) sont réécrits ; les pixels et les autres segments sont recopiés à l'identique. Vérification avant écriture, fichier temporaire puis renommage, copie `.original` facultative, aucune écriture si rien ne change.
+- **Moteur d'écriture sans recompression** : seuls les segments XMP (APP1), IPTC (APP13) et Exif (APP1, uniquement le champ XPKeywords) sont réécrits ; les pixels et les autres segments sont recopiés à l'identique. Vérification avant écriture, fichier temporaire puis renommage, copie `.original` facultative, aucune écriture si rien ne change.
 - **File d'attente reprenable** : les lots sont enregistrés en base, exécutés par paquets, avec journal et reprise après interruption (100 derniers lots conservés).
 - **Droits par groupe Piwigo** (voir ci-dessous) et page dédiée pour les non-webmestres.
 - Les **tags de visages** (racine `Personnes`, gérés par `face_tag_editor` ou digiKam) ne sont jamais affichés ni modifiés.
@@ -26,7 +26,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 
 - **JPEG uniquement** (`.jpg`, `.jpeg`). Les PNG, vidéos, etc. n'ont pas de métadonnées exploitables ici et ne sont ni listés ni acceptés ; ils restent à étiqueter par la méthode standard de Piwigo.
 - Albums **physiques** seulement (répertoires réels) ; les albums virtuels ne sont pas gérés.
-- Mots-clés IPTC limités à 64 octets ; paquet XMP de plus de 64 Ko refusé ; `acdsee:categories` non mis à jour ; XMP étendu non géré.
+- Mots-clés IPTC limités à 64 octets ; paquet XMP de plus de 64 Ko refusé ; XMP étendu non géré. Le point-virgule est interdit dans un nom de tag (séparateur d’Exif XPKeywords).
 - PHP doit pouvoir **écrire** dans les fichiers (et créer des fichiers temporaires dans leur répertoire).
 
 ### Installation
@@ -80,7 +80,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 
 - **JPEG only** (`.jpg`, `.jpeg`). PNG, videos, etc. have no usable metadata here and are neither listed nor accepted; tag them with Piwigo's standard method.
 - **Physical** albums only (real directories); virtual albums are not handled.
-- IPTC keywords are limited to 64 bytes; XMP packets over 64 KB are refused; `acdsee:categories` is not updated; Extended XMP is not handled.
+- IPTC keywords are limited to 64 bytes; XMP packets over 64 KB are refused; Extended XMP is not handled. A semicolon is not allowed in a tag name (Exif XPKeywords separator).
 - PHP must be able to **write** to the files (and create temporary files in their directory).
 
 ### Installation

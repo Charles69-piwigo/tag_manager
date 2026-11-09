@@ -126,7 +126,7 @@ function tagmanager_path_starts($path, $prefix)
  */
 function tagmanager_struct_plan(array $ops)
 {
-  $plan = array('ok' => true, 'errors' => array(), 'lines' => array(), 'file_ops' => array(), 'final' => array(), 'tags' => 0);
+  $plan = array('ok' => true, 'errors' => array(), 'warnings' => array(), 'lines' => array(), 'file_ops' => array(), 'final' => array(), 'tags' => 0);
   if (empty($ops))
   {
     $plan['ok'] = false;
@@ -165,6 +165,45 @@ function tagmanager_struct_plan(array $ops)
       }
     }
     return $out;
+  };
+
+  /** Tags dont le chemin passe par ce tag (ses descendants), sans lui-même. */
+  $descendants = function ($t) use ($map)
+  {
+    $out = array();
+    if ($t['path'] === null)
+    {
+      return $out;
+    }
+    foreach ($map as $o)
+    {
+      if ($o['id'] !== $t['id'] && $o['path'] !== null && strpos($o['path'], $t['path'] . '|') === 0)
+      {
+        $out[] = $o;
+      }
+    }
+    return $out;
+  };
+
+  /** « alpha (4), Eclipse 2026 (4) » : photos de chaque tag, pour l'aperçu. */
+  $describe = function (array $tags)
+  {
+    $ids = array();
+    foreach ($tags as $t) { $ids[] = $t['id']; }
+    $n = array();
+    if (!empty($ids))
+    {
+      foreach (query2array('SELECT tag_id, COUNT(*) AS n FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id IN (' . implode(',', array_map('intval', $ids)) . ') GROUP BY tag_id;') as $r)
+      {
+        $n[(int)$r['tag_id']] = (int)$r['n'];
+      }
+    }
+    $parts = array();
+    foreach ($tags as $t)
+    {
+      $parts[] = '« ' . $t['name'] . ' » (' . (isset($n[$t['id']]) ? $n[$t['id']] : 0) . ')';
+    }
+    return implode(', ', $parts);
   };
 
   $group_exists = function ($path) use ($map, $groups)
@@ -218,6 +257,24 @@ function tagmanager_struct_plan(array $ops)
         }
         $mutated[] = $tname;
 
+        // Un tag peut avoir des tags dessous (comme dans digiKam) : leurs chemins passent par lui
+        $kids = $descendants($t);
+        if (!empty($kids) && ($type === 'merge' || $type === 'delete'))
+        {
+          // Seul ce tag est touché : ses descendants ne bougent pas. À l'utilisateur d'accepter en connaissance de cause.
+          $plan['warnings'][] = '« ' . $tname . ' » contient ' . count($kids) . ' tag(s) : ' . $describe($kids) . '. '
+            . 'Seul « ' . $tname . ' » sera ' . ($type === 'delete' ? 'supprimé' : 'fusionné') . ' ; ces tags ne sont pas modifiés et « ' . $tname
+            . ' » ne subsistera que comme groupe dans leur chemin.';
+          $kids = array();
+        }
+        foreach ($kids as $k)
+        {
+          if ($k['reserved']) { $err('« ' . $tname . ' » contient un tag de visage (« ' . $k['name'] . ' ») : opération refusée.'); break 2; }
+          $mutated[] = $k['name'];
+        }
+        $kid_ids = array();
+        foreach ($kids as $k) { $kid_ids[] = $k['id']; }
+
         if ($type === 'rename')
         {
           $new = trim(isset($op['name']) ? (string)$op['name'] : '');
@@ -227,7 +284,13 @@ function tagmanager_struct_plan(array $ops)
           $to = $t['ok'] ? array_merge(array_slice(explode('|', $t['path']), 0, -1), array($new)) : array($new);
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => $to));
           $plan['final'][] = array('a' => 'rename_tag', 'id' => $t['id'], 'name' => $new, 'path' => $t['ok'] ? implode('|', $to) : null);
-          $plan['lines'][] = 'Renommer « ' . $tname . ' » en « ' . $new . ' »';
+          if (!empty($kids))
+          {
+            $add_files($kid_ids, array('op' => 'replace_prefix', 'from' => explode('|', $t['path']), 'to' => $to));
+            $plan['final'][] = array('a' => 'prefix', 'from' => $t['path'], 'to' => implode('|', $to));
+          }
+          $plan['lines'][] = 'Renommer « ' . $tname . ' » en « ' . $new . ' »'
+            . (!empty($kids) ? ' (et ses ' . count($kids) . ' tag(s) dessous : ' . $describe($kids) . ')' : '');
         }
         elseif ($type === 'merge')
         {
@@ -257,9 +320,20 @@ function tagmanager_struct_plan(array $ops)
           if (tagmanager_is_reserved_root($g)) { $err('Le groupe « ' . $g . ' » est réservé aux tags de visage.'); break; }
           $to = array_merge($segs, array($tname));
           if ($t['ok'] && $t['path'] === implode('|', $to)) { $err('« ' . $tname . ' » est déjà dans ce groupe.'); break; }
+          if (!empty($kids) && $t['ok'] && tagmanager_path_starts(implode('|', $to), $t['path']))
+          {
+            $err('« ' . $tname . ' » ne peut pas être rangé dans l\'un de ses propres tags.');
+            break;
+          }
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => $to, 'ensure' => true));
           $plan['final'][] = array('a' => 'set_path', 'id' => $t['id'], 'path' => implode('|', $to));
-          $plan['lines'][] = 'Ranger « ' . $tname . ' » dans « ' . str_replace('|', ' › ', $g) . ' »';
+          if (!empty($kids) && $t['ok'])
+          {
+            $add_files($kid_ids, array('op' => 'replace_prefix', 'from' => explode('|', $t['path']), 'to' => $to));
+            $plan['final'][] = array('a' => 'prefix', 'from' => $t['path'], 'to' => implode('|', $to));
+          }
+          $plan['lines'][] = 'Ranger « ' . $tname . ' » dans « ' . str_replace('|', ' › ', $g) . ' »'
+            . (!empty($kids) ? ' (et ses ' . count($kids) . ' tag(s) dessous : ' . $describe($kids) . ')' : '');
         }
         break;
 
@@ -298,7 +372,8 @@ function tagmanager_struct_plan(array $ops)
         foreach ($leaves as $l) { $ids[] = $l['id']; }
         $add_files($ids, array('op' => 'replace_prefix', 'from' => $psegs, 'to' => $qsegs));
         $plan['final'][] = array('a' => 'prefix', 'from' => $P, 'to' => $Q);
-        $plan['lines'][] = ($type === 'rename_group' ? 'Renommer' : 'Déplacer') . ' le groupe « ' . str_replace('|', ' › ', $P) . ' »' . ($type === 'rename_group' ? ' en « ' . end($qsegs) . ' »' : ' vers « ' . str_replace('|', ' › ', $Q) . ' »');
+        $plan['lines'][] = ($type === 'rename_group' ? 'Renommer' : 'Déplacer') . ' le groupe « ' . str_replace('|', ' › ', $P) . ' »' . ($type === 'rename_group' ? ' en « ' . end($qsegs) . ' »' : ' vers « ' . str_replace('|', ' › ', $Q) . ' »')
+          . ' (' . count($leaves) . ' tag(s) : ' . $describe($leaves) . ')';
         break;
 
       default:
@@ -331,6 +406,7 @@ function tagmanager_struct_preview(array $ops)
   return array(
     'ok' => $plan['ok'],
     'errors' => $plan['errors'],
+    'warnings' => $plan['warnings'],
     'lines' => $plan['lines'],
     'files' => count($plan['file_ops']),
     'tags' => $plan['tags'],

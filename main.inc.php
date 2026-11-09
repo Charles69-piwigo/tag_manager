@@ -11,6 +11,15 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.0.1 - 09/11/2026
+    corrigé : renommer / déplacer / supprimer un tag laissait l’ancien nom dans une partie des métadonnées du fichier. Le moteur réécrit maintenant les huit champs de mots-clés écrits par digiKam : dc:subject, lr:hierarchicalSubject, digiKam:TagsList, MicrosoftPhoto:LastKeywordXMP, mediapro:CatalogSets, acdsee:categories, IPTC 2:25 et Exif XPKeywords
+    corrigé : MicrosoftPhoto:LastKeywordXMP n’était pas reconnu quand le fichier déclare l’espace de noms sans « / » final (forme écrite par ExifTool)
+    ajouté : acdsee:categories (arbre XML), mediapro:CatalogSets et Exif XPKeywords (UTF-16, nouvelle valeur ajoutée en fin de bloc si elle est plus longue) ; ces champs sont mis à jour seulement s’ils existent, jamais créés
+    ajouté : contrôles de sécurité : avertissement champ_non_gere si une propriété XMP hors registre porte encore l’ancien nom ; relecture du fichier produit avant écriture (erreur verification_champs si un champ est resté périmé)
+    corrigé : renommer ou ranger un tag qui a des tags dessous (comme dans digiKam) laissait l’ancien nom dans le chemin des photos de ses descendants ; ils suivent maintenant. Supprimer ou fusionner un tag qui a des descendants ne touche que ce tag ; l’aperçu avertit (liste des tags dessous, leur nom ne subsiste que comme groupe) et l’utilisateur accepte ou refuse
+    modifié : l’aperçu d’un renommage ou déplacement de groupe détaille les tags touchés et leur nombre de photos
+    dev : test_writer.php surveille les huit champs ; audit_fields.php (lecture seule) repère les fichiers dont les champs ne concordent plus
+
 version 1.0 - 08/11/2026
     première publication sur github
     regroupe les versions 0.0.1 à 0.0.9

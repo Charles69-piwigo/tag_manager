@@ -516,6 +516,7 @@
     const label = r.files ? 'Écrire dans ' + r.files + ' fichier' + (r.files > 1 ? 's' : '') : 'Appliquer';
     $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body" id="dbody">' +
       r.lines.map(l => '<div class="op"><b>' + esc(l) + '</b></div>').join('') +
+      (r.warnings && r.warnings.length ? '<div style="border:1px solid var(--pend);border-radius:6px;padding:8px 10px;margin:6px 0"><b>À savoir avant d’appliquer</b><ul style="margin:4px 0 0 18px">' + r.warnings.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
       '<div>Touche <b>' + r.files + '</b> photo' + (r.files > 1 ? 's' : '') + ' (' + r.tags + ' tag' + (r.tags > 1 ? 's' : '') + '). ' + (r.files ? 'Chaque fichier est relu, modifié puis réécrit, sans toucher à l’image.' : 'Aucun fichier à réécrire.') + '</div>' +
       '<div style="color:var(--muted)">Les tags Piwigo ne sont modifiés qu’une fois <b>tous</b> les fichiers écrits. SmartAlbums suit les fusions et les suppressions par identifiant.</div>' +
       (r.files ? '<label class="chk"><input type="checkbox" id="orig"' + (S.original ? ' checked' : '') + '> Créer une copie <span class="mono">.original</span> si elle n’existe pas</label>' : '') +
