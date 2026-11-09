@@ -375,7 +375,25 @@ function tagmanager_lists_apply(array $L, array $ops)
     if ($op['op'] === 'retag' && !empty($op['ensure']) && !empty($op['to']))
     {
       $leaf = end($op['to']);
-      if (tagmanager_in_names($leaf, $L['leaf']))
+      // Le nom est aussi porté par une personne du fichier : on ne complète rien (voir annotate_ops)
+      $by_person = false;
+      foreach ($fields as $k2 => $f2)
+      {
+        $kind2 = tagmanager_list_kind($f2);
+        if ($kind2 === 'leaf' || empty($L[$k2]))
+        {
+          continue;
+        }
+        foreach ($L[$k2] as $v2)
+        {
+          $sg = tagmanager_split($v2, $kind2 === 'hier' ? '|' : '/');
+          if (!empty($sg) && tagmanager_segs_protected($sg) && tagmanager_same_name(end($sg), $leaf))
+          {
+            $by_person = true;
+          }
+        }
+      }
+      if (!$by_person && tagmanager_in_names($leaf, $L['leaf']))
       {
         foreach ($fields as $k => $f)
         {
@@ -862,6 +880,9 @@ function tagmanager_write_file($path, array $ops, array $opt = array())
   }
   $segs = $jpeg['segs'];
 
+  // « Ranger » : un fichier qui ne porte pas le nom reçoit le chemin complet
+  $ops = tagmanager_ops_resolve_ensure(tagmanager_file_lists($data, $segs), $ops);
+
   // --- XMP ---
   $xi = tagmanager_jpeg_find($data, $segs, 0xE1, TAGMANAGER_XMP_ID);
   $packet = null;
@@ -1074,6 +1095,15 @@ function tagmanager_write_file($path, array $ops, array $opt = array())
  */
 function tagmanager_stale_in_file($out, array $segs, array $ops)
 {
+  return tagmanager_stale_entries(tagmanager_file_lists($out, $segs), $ops);
+}
+
+/**
+ * Listes de mots-clés d'un JPEG en mémoire : champs XMP du registre, « iptc » (2:25) et « xp » (XPKeywords).
+ * Une clé absente ou null : champ absent du fichier.
+ */
+function tagmanager_file_lists($out, array $segs)
+{
   $lists = array();
   $p = tagmanager_read_xmp_packet_from_string($out);
   if ($p !== null)
@@ -1104,7 +1134,51 @@ function tagmanager_stale_in_file($out, array $segs, array $ops)
   {
     $lists['xp'] = tagmanager_exif_keywords(substr($out, $segs[$ei]['p'], $segs[$ei]['e'] - $segs[$ei]['p']));
   }
-  return tagmanager_stale_entries($lists, $ops);
+  return $lists;
+}
+
+/**
+ * « Ranger » / « fusionner » (retag avec ensure) : si le fichier ne porte AUCUNE entrée de ce nom (ni feuille,
+ * ni chemin, y compris celui d'une personne) alors que Piwigo associe la photo au tag, on y inscrit le chemin
+ * complet (opération add). Sans cela, le classement n'existe que dans Piwigo et disparaît à la réindexation.
+ * Un fichier qui porte déjà le nom est traité comme avant (l'entrée existante est transformée).
+ */
+function tagmanager_ops_resolve_ensure(array $lists, array $ops)
+{
+  $fields = tagmanager_xmp_fields();
+  $out = array();
+  foreach ($ops as $op)
+  {
+    $out[] = $op;
+    if ($op['op'] !== 'retag' || empty($op['ensure']) || empty($op['to']))
+    {
+      continue;
+    }
+    $present = false;
+    foreach ($lists as $k => $list)
+    {
+      if ($list === null)
+      {
+        continue;
+      }
+      $kind = isset($fields[$k]) ? tagmanager_list_kind($fields[$k]) : 'leaf';
+      $sep = ($kind === 'hier') ? '|' : '/';
+      foreach ($list as $v)
+      {
+        $segs = ($kind === 'leaf') ? array($v) : tagmanager_split($v, $sep);
+        if (!empty($segs) && tagmanager_same_name(end($segs), $op['from']))
+        {
+          $present = true;
+          break 2;
+        }
+      }
+    }
+    if (!$present)
+    {
+      $out[] = array('op' => 'add', 'path' => $op['to']);
+    }
+  }
+  return $out;
 }
 
 /** Paquet XMP d'un JPEG déjà en mémoire (même logique que tagmanager_read_xmp_packet). */

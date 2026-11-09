@@ -319,7 +319,11 @@ function tagmanager_struct_plan(array $ops)
           foreach ($segs as $s) { if (($e = tagmanager_valid_name($s)) !== null) { $err('Groupe « ' . $g . ' » : ' . $e); break 2; } }
           if (tagmanager_is_reserved_root($g)) { $err('Le groupe « ' . $g . ' » est réservé aux tags de visage.'); break; }
           $to = array_merge($segs, array($tname));
-          if ($t['ok'] && $t['path'] === implode('|', $to)) { $err('« ' . $tname . ' » est déjà dans ce groupe.'); break; }
+          if ($t['ok'] && $t['path'] === implode('|', $to))
+          {
+            // Déjà classé dans Piwigo : on laisse relancer, pour inscrire le tag dans les fichiers qui ne le portent pas
+            $plan['warnings'][] = '« ' . $tname . ' » est déjà dans ce groupe dans Piwigo : l\'opération ne fera que compléter les fichiers qui ne le portent pas encore.';
+          }
           if (!empty($kids) && $t['ok'] && tagmanager_path_starts(implode('|', $to), $t['path']))
           {
             $err('« ' . $tname . ' » ne peut pas être rangé dans l\'un de ses propres tags.');
@@ -379,6 +383,24 @@ function tagmanager_struct_plan(array $ops)
       default:
         $err('Opération inconnue : « ' . $type . ' ».');
     }
+  }
+
+  // Ranger / fusionner inscrivent le tag dans les fichiers qui ne le portent pas encore
+  $writes_tag = false;
+  foreach ($plan['file_ops'] as $fops)
+  {
+    foreach ($fops as $fo)
+    {
+      if (isset($fo['ensure']) && $fo['ensure'])
+      {
+        $writes_tag = true;
+        break 2;
+      }
+    }
+  }
+  if ($writes_tag)
+  {
+    $plan['warnings'][] = 'Les photos que Piwigo associe à ce tag mais dont le fichier n\'en porte aucun mot-clé le recevront dans leurs métadonnées (chemin complet). Sans cela, le classement n\'existerait que dans Piwigo et disparaîtrait à la prochaine indexation.';
   }
 
   $dups = array_diff_assoc($mutated, array_unique($mutated));
