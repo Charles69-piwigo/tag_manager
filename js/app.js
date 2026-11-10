@@ -22,7 +22,7 @@
     t.className = 'toast';
     t.textContent = m;
     root.appendChild(t);
-    setTimeout(() => t.remove(), 2800);
+    setTimeout(() => t.remove(), Math.max(2800, String(m).length * 60)); // message long : le temps de le lire
   }
 
   async function api(action, data) {
@@ -572,6 +572,15 @@
     if (i) { i.focus(); i.addEventListener('keydown', e => { if (e.key === 'Enter') { onOk(); } }); } else { $('#dcancel').focus(); }
   }
 
+  /** Message qui reste affiché jusqu'au clic sur « Fermer » (refus à lire en entier). */
+  function infoDialog(title, message) {
+    $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body"><p>' + esc(message) + '</p></div>' +
+      '<div class="foot"><button class="btn primary" id="dclose">Fermer</button></div></div></div>';
+    const b = $('#dclose');
+    b.onclick = () => { $('#layer').innerHTML = ''; };
+    b.focus();
+  }
+
   /** Création d'un tag depuis l'écran Étiqueter : créé tout de suite, ajouté en file aux photos sélectionnées. */
   async function createFromPanel() {
     const name = $('#nt-name').value.trim(), group = $('#nt-group').value.trim();
@@ -581,7 +590,7 @@
     if (LEVEL() < 2) { toast('Droits insuffisants.'); return; }
     try {
       const r = await api('tag_create', { parent: group, name: name });
-      if (!r.ok) { toast(r.error); return; }
+      if (!r.ok) { infoDialog('Création impossible', r.error); return; }
       buildTags(await api('tags'));
       if (sel.size) { setTag(Array.from(sel), name, true); }
       $('#nt-name').value = '';

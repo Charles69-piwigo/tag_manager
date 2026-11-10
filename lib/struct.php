@@ -45,6 +45,20 @@ function tagmanager_valid_name($n)
   return null;
 }
 
+/**
+ * Message de refus quand un nom de dernier niveau est déjà pris par le tag $t (entrée de tagmanager_tag_map).
+ * Un tag de visage n'apparaît pas dans l'arbre du plugin : le dire explicitement.
+ */
+function tagmanager_name_taken_msg($new, array $t)
+{
+  if (!empty($t['reserved']))
+  {
+    return 'Le nom « ' . $new . ' » est déjà celui d\'un tag de visage (« ' . $t['name'] . ' », une personne gérée par face_tag_editor / digiKam, '
+      . 'qui n\'apparaît pas dans cet arbre). Piwigo ne peut pas avoir deux tags de même nom : choisissez un autre nom, par exemple avec une précision entre parenthèses.';
+  }
+  return 'Un tag « ' . $t['name'] . ' » existe déjà : les noms de dernier niveau doivent rester uniques.';
+}
+
 /** Tous les tags : nom => id, name, path (chemin indexé ou null), status, ok (chemin exploitable), reserved. */
 function tagmanager_tag_map()
 {
@@ -148,10 +162,10 @@ function tagmanager_struct_plan(array $ops)
     {
       if ($t['id'] !== $except_id && tagmanager_norm_cmp($t['name']) === $n)
       {
-        return true;
+        return $t;
       }
     }
-    return false;
+    return null;
   };
 
   $leaves_under = function ($prefix) use ($map)
@@ -280,7 +294,7 @@ function tagmanager_struct_plan(array $ops)
           $new = trim(isset($op['name']) ? (string)$op['name'] : '');
           if (($e = tagmanager_valid_name($new)) !== null) { $err('« ' . $tname . ' » : ' . $e); break; }
           if ($new === $tname) { $err('« ' . $tname . ' » : le nom est inchangé.'); break; }
-          if ($name_taken($new, $t['id'])) { $err('Un tag « ' . $new . ' » existe déjà.'); break; }
+          if (($other = $name_taken($new, $t['id'])) !== null) { $err('« ' . $tname . ' » : ' . tagmanager_name_taken_msg($new, $other)); break; }
           $to = $t['ok'] ? array_merge(array_slice(explode('|', $t['path']), 0, -1), array($new)) : array($new);
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => $to));
           $plan['final'][] = array('a' => 'rename_tag', 'id' => $t['id'], 'name' => $new, 'path' => $t['ok'] ? implode('|', $to) : null);
@@ -614,7 +628,7 @@ function tagmanager_tag_create($parent, $name)
   {
     if (tagmanager_norm_cmp($t['name']) === $n)
     {
-      return array('ok' => false, 'error' => 'Un tag « ' . $t['name'] . ' » existe déjà : les noms de dernier niveau doivent rester uniques.');
+      return array('ok' => false, 'error' => tagmanager_name_taken_msg($name, $t));
     }
   }
 

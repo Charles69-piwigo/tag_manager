@@ -11,6 +11,17 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.2 - 10/11/2026 - regroupe 1.1.2 et 1.1.3
+    corrigé : un tag ordinaire inscrit un jour comme visage dans le registre de face_tag (ex. « Arak », un chien rangé sous FAUNE|Chiens famille) restait invisible dans le plugin. Les fichiers font foi : s'ils le rangent hors de « Personnes », il est traité comme un tag normal et signalé dans « À réconcilier ». Relancer l'indexation après la mise à jour
+    modifié : créer ou renommer un tag avec le nom d'un tag de visage affiche un message explicite (dans une fenêtre avec un bouton « Fermer » depuis « Étiqueter »)
+
+version 1.1.3 - 10/11/2026
+    modifié : créer ou renommer un tag avec le nom d'un tag de visage (personne, invisible dans l'arbre du plugin) affiche un message explicite au lieu de « existe déjà » ; dans « Étiqueter », un refus de création s'affiche dans une fenêtre avec un bouton « Fermer » (et non plus dans un message qui disparaît)
+
+version 1.1.2 - 10/11/2026
+    corrigé : un tag normal inscrit un jour comme visage dans le registre de face_tag (table facetag_person_tags) restait invisible, même après suppression du cadre de visage, car face_tag / face_tag_editor n'en retirent jamais un nom (ex. « Arak », un chien : FAUNE|Chiens famille|Arak dans tous les fichiers). Les fichiers font foi : un tag du registre dont l'indexation trouve un chemin hors racine réservée est traité comme un tag normal et signalé dans « À réconcilier » ; un tag du registre sans chemin (à plat) reste réservé
+    modifié : l'indexation lit aussi les tags du registre de visages (pour savoir s'ils sont sous Personnes|… ou ailleurs). Relancer l'indexation après la mise à jour
+
 version 1.1 - 09/11/2026
     le moteur réécrit les huit champs de mots-clés écrits par digiKam (dc:subject, lr:hierarchicalSubject, digiKam:TagsList, MicrosoftPhoto:LastKeywordXMP, mediapro:CatalogSets, acdsee:categories, IPTC 2:25, Exif XPKeywords) : renommer, déplacer ou supprimer un tag ne laisse plus l’ancien nom dans une partie des métadonnées
     renommer ou ranger un tag qui a des tags dessous fait suivre leurs chemins ; supprimer ou fusionner un tel tag avertit avant d’appliquer

@@ -23,7 +23,18 @@ function tagmanager_norm($s)
   return tagmanager_fold($s);
 }
 
-/** Tags qui ont au moins une photo. */
+/** Tags examinés par l'indexation : tous ceux qui ont au moins une photo (registre de visages compris). */
+function tagmanager_count_index_tags()
+{
+  $row = pwg_db_fetch_row(pwg_query('
+SELECT COUNT(*)
+  FROM ' . TAGS_TABLE . ' t
+  WHERE EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)
+;'));
+  return (int)$row[0];
+}
+
+/** Tags qui ont au moins une photo, hors tags de visage. */
 function tagmanager_count_used_tags()
 {
   $row = pwg_db_fetch_row(pwg_query('
@@ -98,11 +109,14 @@ function tagmanager_index_batch($last_id, $run, $limit = 20)
     $name_of[(int)$r['id']] = $r['name'];
   }
 
+  // Les tags du registre de visages de face_tag sont aussi lus : ce registre n'est jamais nettoyé (un nom
+  // qui a servi une fois de visage y reste), seuls les fichiers disent si le tag est une personne
+  // (Personnes|…) ou un tag normal (voir tagmanager_face_registry_overridden()).
   $tags = query2array('
 SELECT t.id, t.name
   FROM ' . TAGS_TABLE . ' t
   WHERE t.id > ' . intval($last_id) . '
-    AND EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)' . tagmanager_sql_not_face('t.id') . '
+    AND EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)' . '
   ORDER BY t.id
   LIMIT ' . intval($limit) . '
 ;');

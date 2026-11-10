@@ -68,7 +68,7 @@ function tagmanager_ajax($public)
     // --- indexation (onglet Index de l'administration) ---
     case 'index_start':
       $admin_only();
-      $reply(array('run' => time(), 'total' => tagmanager_count_used_tags()));
+      $reply(array('run' => time(), 'total' => tagmanager_count_index_tags()));
 
     case 'index_batch':
       $admin_only();

@@ -22,9 +22,9 @@ function tagmanager_reserved_roots()
 
 /**
  * Identifiants des tags enregistrés comme tags de visage par face_tag / face_tag_editor
- * (table facetag_person_tags, absente si ces plugins n'ont jamais servi).
+ * (table facetag_person_tags, absente si ces plugins n'ont jamais servi), tels quels.
  */
-function tagmanager_face_tag_ids()
+function tagmanager_face_registry_ids()
 {
   static $ids = null;
   if ($ids !== null)
@@ -39,6 +39,62 @@ function tagmanager_face_tag_ids()
   {
     $ids = array_map('intval', query2array('SELECT tag_id FROM `' . $t . '` WHERE is_face_tag = 1;', null, 'tag_id'));
   }
+  return $ids;
+}
+
+/**
+ * Tags inscrits comme visages dans le registre de face_tag mais que les fichiers rangent sous une racine
+ * normale (chemin indexé « ok » hors racines réservées) : tag_id => chemin.
+ * Cas réel : un cadre de visage « Arak » dessiné sur un chien puis supprimé ; face_tag / face_tag_editor
+ * inscrivent un nom dans le registre mais ne l'en retirent jamais. Les fichiers font foi.
+ * Un tag du registre « à plat » (sans chemin) reste réservé : rien ne prouve que ce n'est pas une personne.
+ */
+function tagmanager_face_registry_overridden()
+{
+  static $over = null;
+  if ($over !== null)
+  {
+    return $over;
+  }
+  $over = array();
+  $ids = tagmanager_face_registry_ids();
+  if (empty($ids))
+  {
+    return $over;
+  }
+  $roots = tagmanager_reserved_roots();
+  foreach (query2array('
+SELECT tag_id, path FROM ' . TAGMANAGER_PATHS_TABLE . '
+  WHERE kind = \'tag\' AND status = \'ok\' AND tag_id IN (' . implode(',', $ids) . ')
+;') as $r)
+  {
+    $reserved = false;
+    foreach ($roots as $root)
+    {
+      if ($r['path'] === $root || strpos($r['path'], $root . '|') === 0)
+      {
+        $reserved = true;
+        break;
+      }
+    }
+    if (!$reserved)
+    {
+      $over[(int)$r['tag_id']] = $r['path'];
+    }
+  }
+  return $over;
+}
+
+/** Tags de visage effectifs : registre de face_tag, moins les tags que les fichiers rangent ailleurs. */
+function tagmanager_face_tag_ids()
+{
+  static $ids = null;
+  if ($ids !== null)
+  {
+    return $ids;
+  }
+  $over = tagmanager_face_registry_overridden();
+  $ids = array_values(array_filter(tagmanager_face_registry_ids(), function ($id) use ($over) { return !isset($over[$id]); }));
   return $ids;
 }
 
@@ -547,6 +603,25 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
     }
 
     $out[] = $row;
+  }
+
+  // Tags inscrits comme visages par face_tag alors que les fichiers les rangent ailleurs : traités comme des
+  // tags normaux, mais signalés (le registre de face_tag reste à nettoyer de son côté).
+  $over = tagmanager_face_registry_overridden();
+  if (!empty($over))
+  {
+    foreach (query2array('
+SELECT t.id, t.name,
+       (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id WHERE it.tag_id = t.id) AS n
+  FROM ' . TAGS_TABLE . ' t
+  WHERE t.id IN (' . implode(',', array_keys($over)) . ')
+  ORDER BY t.name
+;') as $f)
+    {
+      $out[] = array('id' => (int)$f['id'], 'name' => $f['name'], 'n' => (int)$f['n'], 'status' => 'facereg',
+        'why' => 'Inscrit comme visage par face_tag, mais les fichiers le rangent sous « ' . str_replace('|', ' › ', $over[(int)$f['id']]) . ' » : traité ici comme un tag normal. face_tag ne retire jamais un nom de son registre (même après suppression du cadre de visage) ; pour le nettoyer : face_tag › Affichage des tags › réinitialisation puis synchronisation.',
+        'act' => 'skip', 'target' => '', 'conf' => 'faible');
+    }
   }
 
   // Homonymes : un tag normal dont le nom est aussi celui d'une personne. Rien n'est modifié :
