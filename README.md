@@ -14,9 +14,12 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 
 ### Fonctionnalités
 
-- **Étiqueter** : navigation par albums physiques (répertoires) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ».
-- **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; créer un tag ou un groupe ; supprimer un groupe vide. Chaque opération passe par un aperçu chiffré calculé par le serveur.
-- **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier.
+- **Étiqueter** : navigation par albums physiques (répertoires) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ». Par tag, les photos sont regroupées par album, avec un bandeau qui indique l'album. Au survol d'un album ou d'un tag, l'icône ↗ ouvre sa page dans la galerie (nouvel onglet).
+- **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; supprimer un groupe vide. Sous la fiche, deux panneaux « Créer un tag » et « Créer un groupe » (un groupe peut être créé au premier niveau). Chaque opération passe par un aperçu chiffré calculé par le serveur.
+- **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier. Deux cas liés aux visages ont leur propre ligne, en langage courant :
+  - un même nom pour une personne et un tag ordinaire : **Séparer** donne un autre nom au tag ordinaire (fichiers et Piwigo), la personne garde le sien ;
+  - un tag marqué comme visage par face_tag alors que ses photos le rangent ailleurs (cadre de visage supprimé) : **Ce n'est pas un visage** le retire de la liste des visages, après relecture des fichiers.
+- **Arbres** : le clic droit déplie ou replie la ligne cliquée et tous ses sous-niveaux, ou tout l'arbre.
 - **Moteur d'écriture sans recompression** : seuls les segments XMP (APP1), IPTC (APP13) et Exif (APP1, uniquement le champ XPKeywords) sont réécrits ; les pixels et les autres segments sont recopiés à l'identique. Vérification avant écriture, fichier temporaire puis renommage, copie `.original` facultative, aucune écriture si rien ne change.
 - **File d'attente reprenable** : les lots sont enregistrés en base, exécutés par paquets, avec journal et reprise après interruption (100 derniers lots conservés).
 - **Droits par groupe Piwigo** (voir ci-dessous) et page dédiée pour les non-webmestres.
@@ -68,10 +71,13 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 
 ### Features
 
-- **Tag photos**: browse by physical albums (real directories) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply".
-- **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; create a tag or a group; delete an empty group. Every operation goes through a server-computed preview with counts.
-- **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file.
-- **Lossless write engine**: only the XMP (APP1) and IPTC (APP13) segments are rewritten; pixels and all other segments are copied unchanged. Verified before writing, temporary file then rename, optional `.original` copy, nothing written when nothing changes.
+- **Tag photos**: browse by physical albums (real directories) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply". When browsing by tag, photos are grouped by album, each group with a banner naming the album. Hovering an album or a tag shows a ↗ icon that opens its gallery page in a new tab.
+- **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; delete an empty group. Below the details pane, two side-by-side boxes "Create a tag" and "Create a group" (a group can be created at the top level). Every operation goes through a server-computed preview with counts.
+- **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file. Two face-related cases get their own plain-language line:
+  - the same name used for a person and for an ordinary tag: **Separate** gives the ordinary tag another name (files and Piwigo), the person keeps theirs;
+  - a tag marked as a face by face_tag although its photos file it elsewhere (face frame removed): **Not a face** removes it from the face list, after re-reading the files.
+- **Trees**: right-click expands or collapses the clicked line with all its sub-levels, or the whole tree.
+- **Lossless write engine**: only the XMP (APP1), IPTC (APP13) and Exif (APP1, XPKeywords field only) segments are rewritten; pixels and all other segments are copied unchanged. Verified before writing, temporary file then rename, optional `.original` copy, nothing written when nothing changes.
 - **Resumable queue**: batches are stored in the database, run in chunks, with a log and recovery after an interruption (last 100 batches kept).
 - **Rights per Piwigo group** (see below) and a dedicated page for non-webmasters.
 - **Face tags** (root `Personnes`, handled by `face_tag_editor` or digiKam) are never shown nor modified.

@@ -172,6 +172,22 @@
 #tm-app{position:relative;height:calc(100vh - 200px);min-height:640px;margin-top:6px;padding:0;text-align:left;font-size:14px}
 #tm-app .app{height:100%;padding:0}
 #tm-app [hidden]{display:none!important}
+#tm-app .dlg h2{display:block;text-align:left;letter-spacing:normal;text-transform:none} /* l'admin de Piwigo masque tous les h2 */
+#tm-app .albh{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;padding:6px 10px;margin-top:4px;background:var(--accent-soft);color:var(--accent);border-radius:5px;font-weight:600;font-size:13px;min-width:0}
+#tm-app .albh:first-child{margin-top:0}
+#tm-app .albh-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tm-app .albh .cnt{font-weight:400;color:var(--muted);white-space:nowrap}
+#tm-app .node a.gal{flex:none;width:22px;height:22px;margin:-3px -2px -3px 0;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;color:var(--accent);text-decoration:none;font-size:13px;visibility:hidden}
+#tm-app .node:hover a.gal,#tm-app .node:focus-within a.gal,#tm-app .node a.gal:focus-visible{visibility:visible}
+#tm-app .node a.gal:hover{background:var(--accent-soft)}
+#tm-app .node a.gal:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+@media (hover:none){#tm-app .node a.gal{visibility:visible}}
+#tm-app .mkadd{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--line)}
+#tm-app .mkadd .add{border-top:0}
+#tm-app .ctx .ctx-sep{height:1px;margin:3px 0;background:var(--line)}
+#tm-app .ctx button{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tm-app .mkadd .add+.add{border-left:1px solid var(--line)}
+@media (max-width:700px){#tm-app .mkadd{grid-template-columns:minmax(0,1fr)}#tm-app .mkadd .add+.add{border-left:0;border-top:1px solid var(--line)}}
 #tm-app img.ph{width:100%;height:auto;aspect-ratio:1/1;object-fit:contain;background:var(--panel2)}
 #tm-app.full{position:fixed;inset:0;z-index:9999;height:auto;min-height:0;margin:0;padding:10px;box-sizing:border-box;overflow:auto}
 body.tm-full{overflow:hidden}

@@ -1,6 +1,6 @@
 <link rel="stylesheet" href="{$TM_ASSETS}css/app.css?v={$TM_CSS_V}">
 
-<div id="tm-app"{if $TM_PUBLIC} class="full" data-public="1" data-level="{$TM_LEVEL}"{/if} data-url="{$TM_URL}" data-token="{$TM_TOKEN}">
+<div id="tm-app"{if $TM_PUBLIC} class="full" data-public="1" data-level="{$TM_LEVEL}"{/if} data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-gallery="{$TM_GALLERY}">
 <div class="app">
   <div class="top">
     <div class="stabs" role="tablist" aria-label="{'Écran'|@translate}">
@@ -68,6 +68,22 @@
       <div class="rz" role="separator" aria-orientation="vertical" tabindex="0" data-rz="m1" aria-label="{'Largeur de l’arbre des tags'|@translate}"></div>
       <section class="pane" aria-label="{'Fiche'|@translate}">
         <div class="pane-b" id="mfiche" style="padding:0"></div>
+        <div class="mkadd">
+          <div class="add" id="mnewtag-box">
+            <b>{'Créer un tag'|@translate}</b>
+            <input id="mt-name" class="fin" type="text" autocomplete="off" placeholder="{'Nom du nouveau tag'|@translate}" aria-label="{'Nom du nouveau tag'|@translate}">
+            <input id="mt-group" class="fin" type="text" autocomplete="off" list="dl-ntg" placeholder="{'Groupe, par exemple ALBUM|2024 SLOVENIE'|@translate}" aria-label="{'Groupe d’accueil du nouveau tag'|@translate}">
+            <button class="btn" id="mt-go">{'Créer le tag'|@translate}</button>
+            <small>{'Créé tout de suite dans Piwigo, sans photo ; il se remplit ensuite avec l’écran Étiqueter.'|@translate}</small>
+          </div>
+          <div class="add" id="mnewgroup-box">
+            <b>{'Créer un groupe'|@translate}</b>
+            <input id="mg-name" class="fin" type="text" autocomplete="off" placeholder="{'Nom du nouveau groupe'|@translate}" aria-label="{'Nom du nouveau groupe'|@translate}">
+            <input id="mg-group" class="fin" type="text" autocomplete="off" list="dl-ntg" placeholder="{'Groupe parent (vide : premier niveau)'|@translate}" aria-label="{'Groupe parent du nouveau groupe, vide pour le premier niveau'|@translate}">
+            <button class="btn" id="mg-go">{'Créer le groupe'|@translate}</button>
+            <small>{'Un groupe vide n’existe que dans le plugin, jusqu’à ce qu’on y crée un tag.'|@translate}</small>
+          </div>
+        </div>
       </section>
     </div>
 

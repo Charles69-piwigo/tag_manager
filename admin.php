@@ -51,6 +51,7 @@ if ($page['tab'] === 'app')
     'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
     'TM_JS_V' => @filemtime(TAGMANAGER_PATH . 'js/app.js'),
     'TM_PUBLIC' => false,
+    'TM_GALLERY' => get_absolute_root_url(),
   ));
   $template->set_filename('tag_manager_app', dirname(__FILE__) . '/template/app.tpl');
   $template->assign_var_from_handle('ADMIN_CONTENT', 'tag_manager_app');

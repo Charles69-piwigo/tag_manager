@@ -8,6 +8,7 @@
   if (!root) { return; }
   const API = root.getAttribute('data-url');
   const TOKEN = root.getAttribute('data-token');
+  const GALLERY = root.getAttribute('data-gallery') || '';
   // page publique (utilisateurs non webmestres) : pas de Paramètres, pas de plein écran à basculer
   const PUBLIC = root.getAttribute('data-public') === '1';
 
@@ -190,21 +191,27 @@
   const pendCount = () => { let ph = 0, ch = 0; Object.keys(pend).forEach(k => { ph++; ch += pend[k].add.size + pend[k].rem.size; }); return { ph: ph, ch: ch }; };
 
   // ---------- rendu : Étiqueter ----------
+  /** Petit lien ↗ (visible au survol de la ligne) vers la page de la galerie, dans un nouvel onglet. */
+  function galLink(path, what) {
+    if (!path || !GALLERY) { return ''; }
+    return '<a class="gal" draggable="false" href="' + esc(GALLERY + path) + '" target="_blank" rel="noopener" title="Ouvrir ' + what + ' dans la galerie (nouvel onglet)" aria-label="Ouvrir ' + what + ' dans la galerie">↗</a>';
+  }
+
   function renderTree() {
     const el = $('#tree');
     let h = '';
     if (view.tab === 'albums') {
       const rec = l => '<ul class="tree">' + l.map(a => {
         const has = a.ch.length, open = !collapsed.has(String(a.id));
-        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + '" tabindex="0" data-alb="' + a.id + '"><span class="caret" data-car="' + a.id + '">' + (has ? (open ? '▼' : '▶') : '') + '</span><span class="nm" title="' + esc(a.name) + '">' + esc(a.name) + '</span><span class="cnt">' + albTot[a.id] + '</span></div>' + (has && open ? rec(a.ch) : '') + '</li>';
+        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + '" tabindex="0" data-alb="' + a.id + '"><span class="caret" data-car="' + a.id + '">' + (has ? (open ? '▼' : '▶') : '') + '</span><span class="nm" title="' + esc(a.name) + '">' + esc(a.name) + '</span><span class="cnt">' + albTot[a.id] + '</span>' + galLink(a.id > 0 ? 'index.php?/category/' + a.id : '', 'l’album') + '</div>' + (has && open ? rec(a.ch) : '') + '</li>';
       }).join('') + '</ul>';
-      h = rec(ALB) + '<div class="hint">Répertoires physiques (liens symboliques vers le NAS). Les noms ne suivent pas les tags.</div>';
+      h = rec(ALB) + '<div class="hint">Répertoires physiques (liens symboliques vers le NAS). Les noms ne suivent pas les tags. ↗ (au survol) : ouvrir l’album dans la galerie.</div>';
     } else {
       const rec = n => '<ul class="tree">' + kids(n).map(c => {
         const k2 = Object.keys(c.ch).length, open = !collapsed.has(c.key), leaf = isLeafNode(c);
-        return '<li><div class="node' + (leaf ? '' : ' group') + (view.key === c.key ? ' sel' : '') + '" tabindex="0" data-tag="' + esc(c.key) + '"' + (leaf ? ' data-leaf="' + esc(c.name) + '"' : '') + '><span class="caret" data-car="' + esc(c.key) + '">' + (k2 ? (open ? '▼' : '▶') : '') + '</span>' + (leaf ? '<span class="leafmark" title="Tag Piwigo"></span>' : '') + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span><span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span></div>' + (k2 && open ? rec(c) : '') + '</li>';
+        return '<li><div class="node' + (leaf ? '' : ' group') + (view.key === c.key ? ' sel' : '') + '" tabindex="0" data-tag="' + esc(c.key) + '"' + (leaf ? ' data-leaf="' + esc(c.name) + '"' : '') + '><span class="caret" data-car="' + esc(c.key) + '">' + (k2 ? (open ? '▼' : '▶') : '') + '</span>' + (leaf ? '<span class="leafmark" title="Tag Piwigo"></span>' : '') + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span><span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span>' + galLink(leaf && TAGID[c.name] ? 'index.php?/tags/' + TAGID[c.name] : '', 'le tag') + '</div>' + (k2 && open ? rec(c) : '') + '</li>';
       }).join('') + '</ul>';
-      h = rec(tagTree()) + '<div class="hint"><span class="leafmark" style="display:inline-block"></span> = tag connu de Piwigo (dernier niveau). Les niveaux grisés n’existent que dans les fichiers. Cliquez pour filtrer les photos, glissez des photos sur un tag pour l’affecter. « (sans chemin) » regroupe les tags dont le chemin n’a pas été retrouvé.</div>';
+      h = rec(tagTree()) + '<div class="hint"><span class="leafmark" style="display:inline-block"></span> = tag connu de Piwigo (dernier niveau). Les niveaux grisés n’existent que dans les fichiers. Cliquez pour filtrer les photos, glissez des photos sur un tag pour l’affecter ; ↗ (au survol) ouvre le tag dans la galerie. « (sans chemin) » regroupe les tags dont le chemin n’a pas été retrouvé.</div>';
     }
     el.innerHTML = h;
   }
@@ -235,7 +242,25 @@
       $('#grid').innerHTML = '<div class="empty" style="grid-column:1/-1">' + (CUR.loading ? 'Chargement des photos…' : 'Aucune photo ici.') + '</div>';
       return;
     }
-    let h = vis.map(p => {
+    // Par tag : un bandeau avant chaque album (le serveur renvoie les photos groupées par album)
+    const byAlb = view.tab !== 'albums';
+    const albN = {};
+    if (byAlb) { vis.forEach(p => { albN[p.alb] = (albN[p.alb] || 0) + 1; }); }
+    let lastAlb;
+    let h = vis.map((p, k) => {
+      let band = '';
+      if (byAlb && (k === 0 || p.alb !== lastAlb)) {
+        const path = p.alb && albMap[p.alb] ? albPath(p.alb).join(' › ') : '(sans album)';
+        band = '<div class="albh" title="' + esc(path) + '"><span class="albh-n">' + esc(path) + '</span><span class="cnt">' + albN[p.alb] + ' photo' + (albN[p.alb] > 1 ? 's' : '') + (k === 0 && CUR.page > 0 ? ' · suite' : '') + '</span></div>';
+      }
+      lastAlb = p.alb;
+      return band + tileHtml(p);
+    }).join('');
+    $('#grid').innerHTML = h;
+  }
+
+  function tileHtml(p) {
+    {
       const q = pend[p.id];
       const chips = [];
       Array.from(p.tags).sort(ncmp).forEach(t => chips.push(q && q.rem.has(t) ? '<span class="chip rem" title="' + esc(t) + '">− ' + esc(t) + '</span>' : '<span class="chip n" title="' + esc(t) + '">' + esc(t) + '</span>'));
@@ -244,8 +269,7 @@
       return '<div class="tile' + (sel.has(p.id) ? ' sel' : '') + '" tabindex="0" draggable="true" data-id="' + p.id + '">' +
         '<img class="ph" loading="lazy" draggable="false" alt="" src="' + esc(p.thumb) + '"><span class="tick">✓</span>' +
         '<div class="cap"><span class="fn" title="' + esc(p.file) + '">' + esc(p.file) + '</span><span class="chips">' + chips.join('') + '</span></div></div>';
-    }).join('');
-    $('#grid').innerHTML = h;
+    }
   }
 
   // pagination numérotée : ‹ 1 … 4 5 [6] 7 8 … 20 ›
@@ -513,6 +537,7 @@
         '<ul style="margin:0 0 0 18px">' + (r.errors || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div><div class="foot"><button class="btn" id="dcancel">Fermer</button></div></div></div>';
       return;
     }
+    if (r.split) { splitPreview(title, r); return; }
     const label = r.files ? 'Écrire dans ' + r.files + ' fichier' + (r.files > 1 ? 's' : '') : 'Appliquer';
     $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body" id="dbody">' +
       r.lines.map(l => '<div class="op"><b>' + esc(l) + '</b></div>').join('') +
@@ -522,6 +547,30 @@
       (r.files ? '<label class="chk"><input type="checkbox" id="orig"' + (S.original ? ' checked' : '') + '> Créer une copie <span class="mono">.original</span> si elle n’existe pas</label>' : '') +
       '<div class="prog" id="prog" hidden><div></div></div><div id="pmsg" style="color:var(--muted)" hidden></div></div>' +
       '<div class="foot"><button class="btn" id="dcancel">Annuler</button><button class="btn pend" id="sapply">' + esc(label) + '</button></div></div></div>';
+    $('#dcancel').focus();
+  }
+
+  /** Aperçu de « Séparer » : les deux usages du nom, lus dans les fichiers, et ce qui sera fait. */
+  function splitPreview(title, r) {
+    const p = r.split, pl = n => n + ' photo' + (n > 1 ? 's' : '');
+    const nb = p.normal + p.both, nPers = p.person + p.both, all = p.person + p.normal + p.both + p.none;
+    const gp = esc(p.new_path.split('|').slice(0, -1).join(' › '));
+    const row = (u, path, n, after) => '<tr><td><b>' + u + '</b><div class="why">' + esc((path || '').split('|').join(' › ')) + '</div></td><td class="n">' + n + '</td><td>' + after + '</td></tr>';
+    const items = ['création du tag « ' + esc(p.name) + ' »' + (gp ? ' dans ' + gp : '') + ' ;',
+      '<b>' + (r.files > 1 ? r.files + ' fichiers réécrits' : '1 fichier réécrit') + '</b> : seul le tag ordinaire change de nom, le cadre de visage n’est pas touché ;',
+      'dans Piwigo, ' + (nb > 1 ? 'ces photos passent' : 'cette photo passe') + ' de « ' + esc(p.tag) + ' » à « ' + esc(p.name) + ' » ;',
+      '« ' + esc(p.tag) + ' » ne reste que sur ' + (nPers > 1 ? 'les photos de la personne' : 'la photo de la personne') + '.'];
+    $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body" id="dbody">' +
+      '<p style="margin:0">' + (all > 1 ? 'Les ' + all + ' photos du tag ont été lues' : 'La photo du tag a été lue') + '. On y trouve deux usages du même nom :</p>' +
+      '<table class="rc"><tr><th>Usage</th><th>Photos</th><th>Après séparation</th></tr>' +
+      row('Personne', p.person_path, nPers, 'inchangé : reste « ' + esc(p.tag) + ' »') +
+      row('Tag ordinaire', p.normal_path, nb, '<span class="chip n">devient</span> ' + esc(p.new_path.split('|').join(' › '))) + '</table>' +
+      '<div style="background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 10px"><b>Ce qui sera fait</b><ul style="margin:4px 0 0 18px">' + items.map(x => '<li>' + x + '</li>').join('') + '</ul></div>' +
+      (p.both ? '<div class="why">' + (p.both > 1 ? p.both + ' photos portent' : '1 photo porte') + ' la personne et le tag ordinaire : ' + (p.both > 1 ? 'elles gardent' : 'elle garde') + ' les deux tags.</div>' : '') +
+      (p.none ? '<div class="why">' + pl(p.none) + ' sans mot-clé « ' + esc(p.tag) + ' » dans le fichier : ' + (p.none > 1 ? 'elles restent' : 'elle reste') + ' sur « ' + esc(p.tag) + ' ».</div>' : '') +
+      '<label class="chk"><input type="checkbox" id="orig"' + (S.original ? ' checked' : '') + '> Créer une copie <span class="mono">.original</span> si elle n’existe pas</label>' +
+      '<div class="prog" id="prog" hidden><div></div></div><div id="pmsg" style="color:var(--muted)" hidden></div></div>' +
+      '<div class="foot"><button class="btn" id="dcancel">Annuler</button><button class="btn pend" id="sapply">Séparer (' + pl(r.files) + ')</button></div></div></div>';
     $('#dcancel').focus();
   }
 
@@ -599,6 +648,47 @@
     } catch (e) { toast('Création impossible : ' + e.message); }
   }
 
+  /** « Créer un tag » de l'écran Gérer les tags : le tag est créé sans photo, puis affiché dans l'arbre. */
+  const mtTouched = { 'mt-group': false, 'mg-group': false }; // groupe saisi à la main : on ne le remplace plus par celui de l'arbre
+  function mtSyncGroup() {
+    const v = (!mkey || mkey.charAt(0) === '(') ? '' : (isLeafKey(mkey) ? mkey.split('|').slice(0, -1).join('|') : mkey);
+    Object.keys(mtTouched).forEach(id => {
+      const g = $('#' + id);
+      if (g && !mtTouched[id] && document.activeElement !== g) { g.value = v; }
+    });
+  }
+  async function createGroupFromMng() {
+    const name = $('#mg-name').value.trim(), parent = $('#mg-group').value.trim();
+    const bad = nameBad(name);
+    if (bad) { toast(bad); return; }
+    if (LEVEL() < 2) { toast('Droits insuffisants.'); return; }
+    try {
+      const r = await api('group_create', { parent: parent, name: name });
+      if (!r.ok) { infoDialog('Création impossible', r.error); return; }
+      $('#mg-name').value = '';
+      mtTouched['mg-group'] = false;
+      structFocus = r.path;
+      toast('Groupe « ' + r.path.split('|').join(' › ') + ' » créé');
+      refreshData();
+    } catch (e) { toast('Création impossible : ' + e.message); }
+  }
+  async function createFromMng() {
+    const name = $('#mt-name').value.trim(), group = $('#mt-group').value.trim();
+    const bad = nameBad(name);
+    if (bad) { toast(bad); return; }
+    if (!group) { toast('Choisissez le groupe d’accueil du tag.'); return; }
+    if (LEVEL() < 2) { toast('Droits insuffisants.'); return; }
+    try {
+      const r = await api('tag_create', { parent: group, name: name });
+      if (!r.ok) { infoDialog('Création impossible', r.error); return; }
+      $('#mt-name').value = '';
+      mtTouched['mt-group'] = false;
+      structFocus = r.path;
+      toast('« ' + name + ' » créé dans ' + group.split('|').join(' › '));
+      refreshData();
+    } catch (e) { toast('Création impossible : ' + e.message); }
+  }
+
   /** Action sur l'élément sélectionné dans l'arbre de « Gérer les tags ». */
   function runStructOp(op, key) {
     const leaf = isLeafKey(key), name = key.split('|').pop(), parent = key.split('|').slice(0, -1).join('|');
@@ -644,6 +734,7 @@
 
   // ---------- rendu : Gérer les tags ----------
   function renderMng() {
+    mtSyncGroup();
     const f = mFilter.trim().toLowerCase();
     const rec = n => {
       let out = '';
@@ -708,6 +799,7 @@
     const can = LEVEL() >= 3 ? '' : ' disabled';
     const head = '<tr><th>Tag dans Piwigo</th><th>Photos</th><th>Constat</th><th>Action</th><th>Cible</th><th></th></tr>';
     const rows = REC.map((r, i) => {
+      if (r.status === 'split' || r.status === 'unface') { return recSpecialRow(r, i, can); }
       const badge = r.conf === 'haute' ? '<span class="chip n">suggestion fiable</span>' : '<span class="chip">à vérifier</span>';
       const opts = Object.keys(RACT).map(k => '<option value="' + k + '"' + (r.act === k ? ' selected' : '') + '>' + RACT[k] + '</option>').join('');
       const needs = r.act === 'merge' || r.act === 'rename' || r.act === 'place';
@@ -721,8 +813,54 @@
     $('#rec-table').innerHTML = head + (rows || '<tr><td colspan="6" class="why">Aucun tag à réconcilier.</td></tr>');
   }
 
+  /** Ligne « personne et tag ordinaire » (Séparer) ou « marqué visage à tort » (Ce n'est pas un visage). */
+  function recSpecialRow(r, i, can) {
+    const cst = '<div style="margin-bottom:4px"><span class="chip">' + esc(r.chip || '') + '</span></div><div>' + esc(r.why) + '</div>' +
+      (r.fix ? '<div class="why" style="margin-top:3px">' + esc(r.fix) + '</div>' : '');
+    let act;
+    if (r.status === 'split') {
+      act = '<label for="rec-nn' + i + '" class="why" style="display:block;margin-bottom:3px">Nouveau nom du tag ordinaire</label>' +
+        '<div style="display:flex;gap:6px;align-items:center"><input type="text" id="rec-nn' + i + '" class="rec-tg" data-ri="' + i + '" value="' + esc(r.target || '') + '" style="flex:1;min-width:0">' +
+        '<button class="btn pend" data-rgo="' + i + '"' + can + '>Séparer…</button></div>';
+    } else {
+      act = '<div style="display:flex;justify-content:flex-end"><button class="btn pend" data-rgo="' + i + '"' + can + '>Ce n’est pas un visage…</button></div>';
+    }
+    return '<tr><td><div class="nm">' + esc(r.name) + '</div></td><td class="n">' + r.n + '</td><td>' + cst + '</td><td colspan="3">' + act + '</td></tr>';
+  }
+
+  /** « Ce n'est pas un visage » : le serveur relit les fichiers avant de retirer le tag de la liste des visages. */
+  function recUnface(r) {
+    const where = r.group ? 'ses photos le rangent sous <b>' + esc(r.group) + '</b>, et ' : '';
+    simpleDialog('« ' + r.name + ' » n’est pas un visage ?',
+      '<p style="margin:0">« ' + esc(r.name) + ' » est marqué comme visage, donc caché comme une personne. Pourtant ' + where + 'aucune photo lue n’a de cadre de visage à ce nom.</p>' +
+      '<div style="background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 10px"><b>Ce qui sera fait</b><ul style="margin:4px 0 0 18px"><li>« ' + esc(r.name) + ' » est retiré de la liste des visages ;</li><li>aucun fichier ni aucune photo n’est modifié.</li></ul></div>' +
+      '<p class="why" style="margin:0">Les fichiers de ses photos sont relus avant. Si un cadre de visage « ' + esc(r.name) + ' » est dessiné plus tard, il sera de nouveau marqué comme visage.</p>',
+      'Retirer des visages', async () => {
+        const g = $('#gerr'), b = $('#sgo');
+        b.disabled = true; b.textContent = 'Lecture des fichiers…';
+        try {
+          const res = await api('face_unflag', { tag: r.id });
+          if (!res.ok) {
+            g.hidden = false; g.textContent = res.error; b.textContent = 'Retirer des visages';
+            if (res.homonym) { api('recon').then(x => { REC = x.rows; renderMng(); renderRec(); }).catch(() => {}); } else { b.disabled = false; }
+            return;
+          }
+          $('#layer').innerHTML = '';
+          toast('« ' + res.name + ' » n’est plus marqué comme visage');
+          refreshData();
+        } catch (e) { g.hidden = false; g.textContent = 'Échec : ' + e.message; b.disabled = false; b.textContent = 'Retirer des visages'; }
+      });
+  }
+
   function recApply(i) {
-    const r = REC[i], op = recOp(r);
+    const r = REC[i];
+    if (r.act === 'unface') { recUnface(r); return; }
+    if (r.act === 'split') {
+      structFocus = null;
+      structPreview('Séparer « ' + r.name + ' » ?', [{ type: 'split', tag: r.name, name: (r.target || '').trim() }]);
+      return;
+    }
+    const op = recOp(r);
     if (!op) { return; }
     structFocus = null;
     structPreview('Réconciliation : ' + r.name, [op]);
@@ -782,6 +920,7 @@
     const t = e.target;
     const g = sel2 => t.closest(sel2);
     let x;
+    if (g('a.gal')) { return; } // lien vers la galerie : le navigateur l'ouvre, la sélection ne change pas
     if (g('#fs-toggle')) { setFull(!root.classList.contains('full')); return; }
     if ((x = g('[data-screen]'))) { showScreen(x.getAttribute('data-screen')); return; }
     if ((x = g('[data-sub]'))) { showSub(x.getAttribute('data-sub')); return; }
@@ -818,6 +957,8 @@
     if ((x = g('[data-rgo]'))) { recApply(parseInt(x.getAttribute('data-rgo'), 10)); return; }
     if (t.id === 'rec-bulk') { recBulk(); return; }
     if (t.id === 'nt-go') { createFromPanel(); return; }
+    if (t.id === 'mt-go') { createFromMng(); return; }
+    if (t.id === 'mg-go') { createGroupFromMng(); return; }
     if ((x = g('[data-jresume]'))) { resumeJob(parseInt(x.getAttribute('data-jresume'), 10), parseInt(x.getAttribute('data-jtotal'), 10)); return; }
     if ((x = g('[data-jcancel]'))) { cancelJob(parseInt(x.getAttribute('data-jcancel'), 10)); return; }
     if ((x = g('[data-jerr]'))) { showJobErrors(parseInt(x.getAttribute('data-jerr'), 10)); return; }
@@ -867,17 +1008,30 @@
     }
   });
 
-  // clic droit dans un arbre : tout déplier / tout replier
+  // clic droit dans un arbre : déplier / replier la ligne cliquée (et tout ce qu'elle contient), ou tout l'arbre
   function closeCtx() { const m = $('.ctx'); if (m) { m.remove(); } }
   function treeTarget(el) {
     const keys = () => { const out = []; (function w(n) { Object.keys(n.ch).forEach(k => { const c = n.ch[k]; if (Object.keys(c.ch).length) { out.push(c.key); w(c); } }); })(tagTree()); return out; };
+    // sous : clés repliables de la branche (la ligne comprise)
+    const tagUnder = k => keys().filter(x => x === k || x.indexOf(k + '|') === 0);
     if (el.closest('#tree')) {
-      return view.tab === 'albums'
-        ? { set: collapsed, keys: () => Object.keys(albMap).filter(id => albMap[id].a.ch.length), draw: renderTree }
-        : { set: collapsed, keys: keys, draw: renderTree };
+      if (view.tab === 'albums') {
+        const n = el.closest('[data-alb]');
+        const albUnder = id => { const out = []; (function w(a) { if (a.ch.length) { out.push(String(a.id)); a.ch.forEach(w); } })(albMap[id].a); return out; };
+        return { set: collapsed, keys: () => Object.keys(albMap).filter(id => albMap[id].a.ch.length), draw: renderTree,
+          node: n && albMap[n.getAttribute('data-alb')] ? { name: albMap[n.getAttribute('data-alb')].a.name, under: () => albUnder(n.getAttribute('data-alb')) } : null };
+      }
+      const n = el.closest('[data-tag]');
+      return { set: collapsed, keys: keys, draw: renderTree, node: n ? { name: n.getAttribute('data-tag').split('|').pop(), under: () => tagUnder(n.getAttribute('data-tag')) } : null };
     }
-    if (el.closest('#rows')) { return { set: pCol, keys: keys, draw: renderPanel }; }
-    if (el.closest('#mtree')) { return { set: mCol, keys: keys, draw: renderMng }; }
+    if (el.closest('#rows')) {
+      const n = el.closest('[data-pcar]');
+      return { set: pCol, keys: keys, draw: renderPanel, node: n ? { name: n.getAttribute('data-pcar').split('|').pop(), under: () => tagUnder(n.getAttribute('data-pcar')) } : null };
+    }
+    if (el.closest('#mtree')) {
+      const n = el.closest('[data-mt]');
+      return { set: mCol, keys: keys, draw: renderMng, node: n ? { name: n.getAttribute('data-mt').split('|').pop(), under: () => tagUnder(n.getAttribute('data-mt')) } : null };
+    }
     return null;
   }
   root.addEventListener('contextmenu', function (e) {
@@ -887,14 +1041,21 @@
     closeCtx();
     const m = document.createElement('div');
     m.className = 'ctx'; m.setAttribute('role', 'menu');
-    m.innerHTML = '<button role="menuitem" data-ctx="open">Tout déplier</button><button role="menuitem" data-ctx="close">Tout replier</button>';
-    m.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
-    m.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const br = tg.node && tg.node.under().length ? tg.node : null; // ligne cliquée, si elle a des sous-niveaux
+    m.innerHTML = (br ? '<button role="menuitem" data-ctx="bopen">Déplier « ' + esc(br.name) + ' »</button><button role="menuitem" data-ctx="bclose">Replier « ' + esc(br.name) + ' »</button><div class="ctx-sep" role="separator"></div>' : '') +
+      '<button role="menuitem" data-ctx="open">Tout déplier</button><button role="menuitem" data-ctx="close">Tout replier</button>';
+    m.style.left = Math.min(e.clientX, window.innerWidth - 260) + 'px';
+    m.style.top = Math.min(e.clientY, window.innerHeight - (br ? 150 : 90)) + 'px';
     m.addEventListener('click', ev => {
       const b = ev.target.closest('[data-ctx]');
       if (!b) { return; }
-      tg.set.clear();
-      if (b.getAttribute('data-ctx') === 'close') { tg.keys().forEach(k => tg.set.add(String(k))); }
+      const a = b.getAttribute('data-ctx');
+      if (a === 'bopen') { br.under().forEach(k => tg.set.delete(String(k))); }
+      else if (a === 'bclose') { br.under().forEach(k => tg.set.add(String(k))); }
+      else {
+        tg.set.clear();
+        if (a === 'close') { tg.keys().forEach(k => tg.set.add(String(k))); }
+      }
       closeCtx(); tg.draw();
     });
     root.appendChild(m);
@@ -903,6 +1064,12 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); } });
   window.addEventListener('scroll', closeCtx, true);
 
+  root.addEventListener('input', e => { if (e.target.id in mtTouched) { mtTouched[e.target.id] = e.target.value.trim() !== ''; } });
+  root.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') { return; }
+    if (e.target.id === 'mt-name' || e.target.id === 'mt-group') { e.preventDefault(); createFromMng(); }
+    if (e.target.id === 'mg-name' || e.target.id === 'mg-group') { e.preventDefault(); createGroupFromMng(); }
+  });
   root.addEventListener('input', e => { const t = e.target; if (t.classList && t.classList.contains('rec-tg')) { REC[parseInt(t.getAttribute('data-ri'), 10)].target = t.value; } });
   $('#set-reserved').addEventListener('input', e => { S.reserved = e.target.value.split(',').map(x => x.trim()).filter(Boolean); });
   $('#pfilter').addEventListener('input', e => { pFilter = e.target.value; renderPanel(); });

@@ -124,6 +124,67 @@ function tagmanager_path_starts($path, $prefix)
   return $path === $prefix || strpos($path, $prefix . '|') === 0;
 }
 
+/** Au-delà, « Séparer » est refusé : toutes les photos du tag sont lues pour l'aperçu. */
+define('TAGMANAGER_SPLIT_MAX', 500);
+
+/**
+ * Lit les fichiers de TOUTES les photos d'un tag pour savoir où son nom apparaît : comme personne
+ * (chemin sous une racine réservée), comme tag ordinaire (autre chemin), les deux, ou aucun.
+ * Sert à « Séparer » (aperçu exact) et à « Ce n'est pas un visage » (vérification).
+ * @param int|null $max nombre de photos lues au plus (réparties sur la liste) ; null : toutes
+ * @return array person, normal, both, none, unreadable (listes d'image_id), person_path, normal_path, total, read
+ */
+function tagmanager_usage_scan($tag_id, $name, $max = null)
+{
+  @set_time_limit(300);
+  $ids = array_map('intval', query2array('SELECT image_id FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($tag_id) . ' ORDER BY image_id;', null, 'image_id'));
+  $out = array('person' => array(), 'normal' => array(), 'both' => array(), 'none' => array(), 'unreadable' => array(),
+    'person_path' => null, 'normal_path' => null, 'total' => count($ids), 'read' => 0);
+  $pick = $ids;
+  if ($max !== null && count($ids) > $max)
+  {
+    $pick = array();
+    for ($k = 0; $k < $max; $k++)
+    {
+      $pick[] = $ids[(int)floor($k * count($ids) / $max)];
+    }
+  }
+  foreach (array_chunk($pick, 200) as $chunk)
+  {
+    foreach (query2array('SELECT id, path FROM ' . IMAGES_TABLE . ' WHERE id IN (' . implode(',', $chunk) . ') ORDER BY id;') as $img)
+    {
+      $paths = tagmanager_read_hierarchy(tagmanager_resolve_path($img['path']));
+      if ($paths === null)
+      {
+        $out['unreadable'][] = (int)$img['id'];
+        continue;
+      }
+      $out['read']++;
+      $p_person = false;
+      $p_normal = false;
+      foreach ($paths as $p)
+      {
+        if (empty($p) || !tagmanager_same_name(end($p), $name))
+        {
+          continue;
+        }
+        if (tagmanager_is_reserved_root(implode('|', $p)))
+        {
+          $p_person = true;
+          if ($out['person_path'] === null) { $out['person_path'] = implode('|', $p); }
+        }
+        else
+        {
+          $p_normal = true;
+          if ($out['normal_path'] === null) { $out['normal_path'] = implode('|', $p); }
+        }
+      }
+      $out[$p_person ? ($p_normal ? 'both' : 'person') : ($p_normal ? 'normal' : 'none')][] = (int)$img['id'];
+    }
+  }
+  return $out;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Plan : validation et calcul des fichiers concernés (aucune écriture)
 // ---------------------------------------------------------------------------------------------
@@ -355,6 +416,44 @@ function tagmanager_struct_plan(array $ops)
         }
         break;
 
+      case 'split':
+        // Un même tag Piwigo sert de personne et de tag ordinaire : le tag ordinaire prend un autre nom,
+        // la personne garde le tag (même identifiant). Décision photo par photo, d'après les fichiers.
+        if (!isset($map[$tname])) { $err('« ' . $tname . ' » : tag inconnu de Piwigo.'); break; }
+        $t = $map[$tname];
+        if ($t['reserved']) { $err('« ' . $tname . ' » : tag de visage, géré par face_tag_editor et digiKam.'); break; }
+        $new = trim(isset($op['name']) ? (string)$op['name'] : '');
+        if (($e = tagmanager_valid_name($new)) !== null) { $err('Nouveau nom : ' . $e); break; }
+        if (tagmanager_norm_cmp($new) === tagmanager_norm_cmp($tname)) { $err('Choisissez un nom différent de « ' . $tname . ' ».'); break; }
+        if (($other = $name_taken($new, -1)) !== null) { $err(tagmanager_name_taken_msg($new, $other)); break; }
+        $total = (int)pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($t['id']) . ';'))[0];
+        if ($total > TAGMANAGER_SPLIT_MAX) { $err('« ' . $tname . ' » est sur ' . $total . ' photos : séparation limitée à ' . TAGMANAGER_SPLIT_MAX . ' photos.'); break; }
+        $mutated[] = $tname;
+        $scan = tagmanager_usage_scan($t['id'], $tname);
+        if (!empty($scan['unreadable']))
+        {
+          $err(count($scan['unreadable']) . ' fichier(s) illisible(s) : impossible de savoir s\'ils portent la personne ou le tag ordinaire.');
+          break;
+        }
+        $moved = array_merge($scan['normal'], $scan['both']);
+        if (empty($moved)) { $err('Aucune photo ne porte « ' . $tname . ' » comme tag ordinaire : rien à séparer.'); break; }
+        if (empty($scan['person']) && empty($scan['both'])) { $err('Aucune photo ne porte « ' . $tname . ' » comme personne : utilisez plutôt « Renommer ».'); break; }
+        $npath = $scan['normal_path'] !== null ? $scan['normal_path'] : ($t['ok'] ? $t['path'] : $tname);
+        $to = array_merge(array_slice(explode('|', $npath), 0, -1), array($new));
+        foreach ($moved as $img)
+        {
+          $plan['file_ops'][$img][] = array('op' => 'retag', 'from' => $tname, 'to' => $to);
+        }
+        $plan['final'][] = array('a' => 'split', 'src' => $t['id'], 'name' => $new, 'path' => implode('|', $to),
+          'person_path' => $scan['person_path'], 'move' => $scan['normal'], 'both' => $scan['both']);
+        $plan['split'] = array(
+          'tag' => $tname, 'name' => $new,
+          'person' => count($scan['person']), 'normal' => count($scan['normal']), 'both' => count($scan['both']), 'none' => count($scan['none']),
+          'person_path' => $scan['person_path'], 'normal_path' => $npath, 'new_path' => implode('|', $to),
+        );
+        $plan['lines'][] = 'Séparer « ' . $tname . ' » : le tag ordinaire devient « ' . $new . ' »';
+        break;
+
       case 'rename_group':
       case 'move_group':
         $P = trim(isset($op['group']) ? (string)$op['group'] : '');
@@ -446,6 +545,7 @@ function tagmanager_struct_preview(array $ops)
     'lines' => $plan['lines'],
     'files' => count($plan['file_ops']),
     'tags' => $plan['tags'],
+    'split' => isset($plan['split']) ? $plan['split'] : null,
   );
 }
 
@@ -570,6 +670,39 @@ function tagmanager_job_finalize($job_id)
         trigger_notify('merge_tags', $dst, $src);   // SmartAlbums remplace l'ancien identifiant par le nouveau
         delete_tags($src);
         pwg_query('DELETE FROM ' . TAGMANAGER_PATHS_TABLE . ' WHERE kind = \'tag\' AND tag_id IN (' . implode(',', $src) . ');');
+        break;
+
+      case 'split':
+        // Les fichiers sont déjà réécrits : le nouveau tag reçoit les photos du tag ordinaire,
+        // l'ancien ne reste que sur les photos de la personne.
+        $src = intval($f['src']);
+        $exists = query2array('SELECT id, name FROM ' . TAGS_TABLE . ' WHERE name = \'' . pwg_db_real_escape_string($f['name']) . '\';');
+        if (!empty($exists))
+        {
+          $msgs[] = 'Séparation : « ' . $f['name'] . ' » existe déjà dans Piwigo, photos non déplacées.';
+          $ok = false;
+          break;
+        }
+        $r = create_tag(pwg_db_real_escape_string($f['name']));
+        if (isset($r['error']) || empty($r['id']))
+        {
+          $msgs[] = 'Séparation : création du tag « ' . $f['name'] . ' » impossible.';
+          $ok = false;
+          break;
+        }
+        $nid = intval($r['id']);
+        $imgs = array_map('intval', array_merge($f['move'], $f['both']));
+        $inserts = array();
+        foreach ($imgs as $img) { $inserts[] = array('tag_id' => $nid, 'image_id' => $img); }
+        if (!empty($inserts)) { mass_inserts(IMAGE_TAG_TABLE, array('tag_id', 'image_id'), $inserts, array('ignore' => true)); }
+        if (!empty($f['move']))
+        {
+          pwg_query('DELETE FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . $src . ' AND image_id IN (' . implode(',', array_map('intval', $f['move'])) . ');');
+        }
+        tagmanager_upsert_path($nid, $f['path']);
+        if (!empty($f['person_path'])) { tagmanager_upsert_path($src, $f['person_path']); }
+        tagmanager_ensure_homonym_table();
+        pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' WHERE tag_id = ' . $src . ';');
         break;
 
       case 'delete_tag':

@@ -11,6 +11,32 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.3 - 11/11/2026 - regroupe 1.2.1 à 1.2.5
+    modifié : « À réconcilier » en langage courant, une ligne par nom partagé entre une personne et un tag ordinaire
+    ajouté : « Séparer » (personne et tag ordinaire de même nom : le tag ordinaire prend un autre nom, la personne garde le sien) et « Ce n'est pas un visage » (tag marqué visage par face_tag à tort, retiré de la liste des visages après relecture des fichiers)
+    ajouté : par tag, photos regroupées par album avec un bandeau d'album ; icône ↗ au survol d'un album ou d'un tag pour l'ouvrir dans la galerie
+    ajouté : « Gérer les tags » : panneaux « Créer un tag » et « Créer un groupe » (groupe possible au premier niveau)
+    ajouté : clic droit dans les arbres : déplier / replier la ligne cliquée et ses sous-niveaux
+    corrigé : titres des fenêtres invisibles (l'administration de Piwigo masque les h2)
+
+version 1.2.5 - 11/11/2026
+    ajouté : le menu du clic droit des arbres (Albums, Tags, Tags de la sélection, Gérer les tags) propose aussi « Déplier « X » » et « Replier « X » » pour la ligne cliquée : la branche entière (la ligne et tous ses sous-niveaux) ; « Tout déplier / Tout replier » restent en dessous. Sur une ligne sans sous-niveau, seul « Tout … » est proposé
+
+version 1.2.4 - 11/11/2026
+    ajouté : dans « Gérer les tags », sous la fiche, deux panneaux côte à côte « Créer un tag » et « Créer un groupe » : nom + groupe d'accueil, prérempli avec le groupe choisi dans l'arbre (ou celui du tag choisi) tant qu'on ne le saisit pas soi-même ; Entrée valide. Le tag est créé sans photo ; le groupe est créé vide, au premier niveau si le groupe parent est vide (impossible jusqu'ici). L'élément créé est sélectionné dans l'arbre
+
+version 1.2.3 - 11/11/2026
+    ajouté : dans « Étiqueter », au survol d'un album (onglet Albums) ou d'un tag (onglet Tags) du panneau de gauche, une petite icône ↗ ouvre sa page dans la galerie, dans un nouvel onglet (vrai lien : clic molette possible ; le clic sur le nom garde son rôle ; un groupe de tags, qui n'est pas un tag Piwigo, n'a pas d'icône). Remplace le double clic d'abord essayé, qui se mélangeait avec le simple clic
+
+version 1.2.2 - 11/11/2026
+    modifié : dans « Étiqueter », quand on choisit un tag dans le panneau de gauche, les photos sont regroupées par album (ordre de l'arbre des albums) et un bandeau indique l'album avant ses photos (chemin complet, nombre de photos sur la page, « suite » en haut d'une page qui continue l'album précédent)
+
+version 1.2.1 - 11/11/2026
+    modifié : « À réconcilier » affiche une seule ligne, en langage courant, par nom partagé entre une personne et un tag ordinaire (au lieu de deux lignes « Inscrit comme visage par face_tag » et « Homonyme » qui renvoyaient vers face_tag ou digiKam)
+    ajouté : « Séparer » (personne et tag ordinaire de même nom) : le tag ordinaire prend un autre nom (« visage (tag) » proposé) dans les fichiers et dans Piwigo, la personne garde le tag d'origine. Aperçu exact : toutes les photos du tag sont lues (500 au plus) ; le cadre de visage et l'entrée Personnes|… ne sont jamais touchés ; une photo qui porte les deux garde les deux tags
+    ajouté : « Ce n'est pas un visage » (tag marqué visage par face_tag alors que ses photos le rangent ailleurs, ex. le chien « Arak ») : après relecture des fichiers, le tag est retiré de la liste des visages de face_tag (ligne supprimée, comme le fait face_tag_editor). Si une photo le porte bien comme personne, rien n'est retiré et la ligne propose « Séparer »
+    corrigé : le titre des fenêtres (aperçus, confirmations) n'apparaissait pas : l'administration de Piwigo masque tous les titres h2
+
 version 1.2 - 10/11/2026 - regroupe 1.1.2 et 1.1.3
     corrigé : un tag ordinaire inscrit un jour comme visage dans le registre de face_tag (ex. « Arak », un chien rangé sous FAUNE|Chiens famille) restait invisible dans le plugin. Les fichiers font foi : s'ils le rangent hors de « Personnes », il est traité comme un tag normal et signalé dans « À réconcilier ». Relancer l'indexation après la mise à jour
     modifié : créer ou renommer un tag avec le nom d'un tag de visage affiche un message explicite (dans une fenêtre avec un bouton « Fermer » depuis « Étiqueter »)

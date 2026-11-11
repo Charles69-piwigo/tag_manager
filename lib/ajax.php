@@ -144,6 +144,10 @@ function tagmanager_ajax($public)
       }
       $reply(tagmanager_struct_create($sops, $flag('original')));
 
+    case 'face_unflag':
+      $need(3);
+      $reply(tagmanager_face_unflag(isset($_POST['tag']) ? $_POST['tag'] : 0));
+
     case 'job_retry':
       $need(3);
       $reply(tagmanager_job_retry(isset($_POST['job']) ? $_POST['job'] : 0));

@@ -394,13 +394,53 @@ function tagmanager_data_photos($mode, array $ids, $offset, $limit)
   $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(DISTINCT i.id) FROM ' . $from . ' WHERE ' . $where . ';'));
   $total = (int)$row[0];
 
-  $imgs = query2array('
+  if ($mode === 'album')
+  {
+    $imgs = query2array('
 SELECT DISTINCT i.*
   FROM ' . $from . '
   WHERE ' . $where . '
   ORDER BY i.date_creation, i.id
   LIMIT ' . $offset . ', ' . $limit . '
 ;');
+  }
+  else
+  {
+    // Par tag : photos regroupées par album, dans l'ordre de l'arbre des albums (bandeaux d'album dans la
+    // grille). global_rank est un texte (« 1.10 » avant « 1.2 » en SQL) : tri en PHP, segment par segment.
+    $all = query2array('SELECT DISTINCT i.id, i.storage_category_id AS cat, i.date_creation AS d FROM ' . $from . ' WHERE ' . $where . ';');
+    $cats = array();
+    foreach ($all as $a) { if ($a['cat'] !== null) { $cats[(int)$a['cat']] = true; } }
+    $rank = array();
+    if (!empty($cats))
+    {
+      foreach (query2array('SELECT id, global_rank FROM ' . CATEGORIES_TABLE . ' WHERE id IN (' . implode(',', array_keys($cats)) . ');') as $c)
+      {
+        $rank[(int)$c['id']] = array_map('intval', explode('.', (string)$c['global_rank']));
+      }
+    }
+    usort($all, function ($x, $y) use ($rank)
+    {
+      $rx = ($x['cat'] !== null && isset($rank[(int)$x['cat']])) ? $rank[(int)$x['cat']] : array(PHP_INT_MAX);
+      $ry = ($y['cat'] !== null && isset($rank[(int)$y['cat']])) ? $rank[(int)$y['cat']] : array(PHP_INT_MAX);
+      for ($k = 0; $k < min(count($rx), count($ry)); $k++)
+      {
+        if ($rx[$k] !== $ry[$k]) { return $rx[$k] < $ry[$k] ? -1 : 1; }
+      }
+      if (count($rx) !== count($ry)) { return count($rx) < count($ry) ? -1 : 1; }
+      if ((string)$x['d'] !== (string)$y['d']) { return strcmp((string)$x['d'], (string)$y['d']); }
+      return (int)$x['id'] - (int)$y['id'];
+    });
+    $page_ids = array();
+    foreach (array_slice($all, $offset, $limit) as $a) { $page_ids[] = (int)$a['id']; }
+    $imgs = array();
+    if (!empty($page_ids))
+    {
+      $byid = array();
+      foreach (query2array('SELECT * FROM ' . IMAGES_TABLE . ' WHERE id IN (' . implode(',', $page_ids) . ');') as $i) { $byid[(int)$i['id']] = $i; }
+      foreach ($page_ids as $id) { if (isset($byid[$id])) { $imgs[] = $byid[$id]; } }
+    }
+  }
 
   $ids_page = array();
   foreach ($imgs as $i)
@@ -605,9 +645,35 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
     $out[] = $row;
   }
 
-  // Tags inscrits comme visages par face_tag alors que les fichiers les rangent ailleurs : traités comme des
-  // tags normaux, mais signalés (le registre de face_tag reste à nettoyer de son côté).
+  // Un même nom pour une personne et un tag ordinaire (homonyme, relevé par l'indexation) : une seule
+  // ligne « Séparer », que le tag soit inscrit ou non comme visage dans le registre de face_tag.
+  tagmanager_ensure_homonym_table();
+  $homonyms = array();
+  foreach (query2array('
+SELECT t.id, t.name, h.person_path, p.path,
+       (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id WHERE it.tag_id = t.id) AS n
+  FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' h JOIN ' . TAGS_TABLE . ' t ON t.id = h.tag_id
+    LEFT JOIN ' . TAGMANAGER_PATHS_TABLE . ' p ON p.tag_id = t.id AND p.kind = \'tag\' AND p.status = \'ok\'
+  ORDER BY t.name
+;') as $h)
+  {
+    if (tagmanager_is_reserved($h['id'], $h['name'], null))
+    {
+      continue;
+    }
+    $homonyms[(int)$h['id']] = true;
+    $where = ($h['path'] && !tagmanager_is_reserved_root($h['path'])) ? ' (' . str_replace('|', ' › ', implode('|', array_slice(explode('|', $h['path']), 0, -1))) . ')' : '';
+    $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'split',
+      'chip' => 'personne et tag ordinaire',
+      'why' => '« ' . $h['name'] . ' » sert à deux choses : c\'est le nom d\'une personne (cadre de visage) et un tag ordinaire' . $where . '. Piwigo n\'a qu\'un seul tag pour les deux et ne peut pas les distinguer.',
+      'fix' => 'Solution : donner un autre nom au tag ordinaire. La personne garde le nom « ' . $h['name'] . ' ».',
+      'act' => 'split', 'target' => $h['name'] . ' (tag)', 'conf' => 'faible');
+  }
+
+  // Tag inscrit comme visage par face_tag alors que ses fichiers le rangent ailleurs, sans personne de ce
+  // nom : face_tag ne retire jamais un nom de son registre (cadre de visage supprimé, ex. le chien « Arak »).
   $over = tagmanager_face_registry_overridden();
+  $over = array_diff_key($over, $homonyms);
   if (!empty($over))
   {
     foreach (query2array('
@@ -618,32 +684,55 @@ SELECT t.id, t.name,
   ORDER BY t.name
 ;') as $f)
     {
-      $out[] = array('id' => (int)$f['id'], 'name' => $f['name'], 'n' => (int)$f['n'], 'status' => 'facereg',
-        'why' => 'Inscrit comme visage par face_tag, mais les fichiers le rangent sous « ' . str_replace('|', ' › ', $over[(int)$f['id']]) . ' » : traité ici comme un tag normal. face_tag ne retire jamais un nom de son registre (même après suppression du cadre de visage) ; pour le nettoyer : face_tag › Affichage des tags › réinitialisation puis synchronisation.',
-        'act' => 'skip', 'target' => '', 'conf' => 'faible');
+      $grp = implode('|', array_slice(explode('|', $over[(int)$f['id']]), 0, -1));
+      $out[] = array('id' => (int)$f['id'], 'name' => $f['name'], 'n' => (int)$f['n'], 'status' => 'unface',
+        'chip' => 'marqué visage à tort', 'group' => str_replace('|', ' › ', $grp),
+        'why' => '« ' . $f['name'] . ' » est marqué comme visage, mais aucune photo lue n\'a de cadre de visage à ce nom : ses photos le rangent sous ' . str_replace('|', ' › ', $grp !== '' ? $grp : $over[(int)$f['id']]) . '. Il est donc caché comme une personne alors que c\'est un tag ordinaire.',
+        'fix' => 'Solution : le retirer de la liste des visages. Aucun fichier n\'est modifié.',
+        'act' => 'unface', 'target' => '', 'conf' => 'faible');
     }
-  }
-
-  // Homonymes : un tag normal dont le nom est aussi celui d'une personne. Rien n'est modifié :
-  // le moteur ignore les entrées Personnes|... ; on signale seulement pour que l'utilisateur tranche.
-  tagmanager_ensure_homonym_table();
-  foreach (query2array('
-SELECT t.id, t.name, h.person_path,
-       (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id WHERE it.tag_id = t.id) AS n
-  FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' h JOIN ' . TAGS_TABLE . ' t ON t.id = h.tag_id
-  ORDER BY t.name
-;') as $h)
-  {
-    if (tagmanager_is_reserved($h['id'], $h['name'], null))
-    {
-      continue;
-    }
-    $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'homonym',
-      'why' => 'Homonyme : « ' . $h['name'] . ' » est aussi une personne (' . str_replace('|', ' › ', $h['person_path']) . '). Le plugin ne touche jamais à l\'entrée de la personne ; Piwigo ne sait pas distinguer les deux. Pour les séparer, renommez l\'un des deux dans digiKam.',
-      'act' => 'skip', 'target' => '', 'conf' => 'faible');
   }
 
   return $out;
+}
+
+/**
+ * « Ce n'est pas un visage » : retire de la liste des visages de face_tag (table facetag_person_tags)
+ * un tag que les fichiers rangent hors racine réservée. La ligne est SUPPRIMÉE, comme le fait
+ * face_tag_editor : si un cadre de ce nom est dessiné plus tard, face_tag l'inscrira de nouveau.
+ * Vérifie d'abord, en lisant les fichiers du tag (300 au plus), qu'aucune photo ne le porte comme
+ * personne ; sinon c'est un homonyme : il est enregistré comme tel (la ligne devient « Séparer »).
+ * Table absente : refus, rien n'est créé.
+ */
+function tagmanager_face_unflag($tag_id)
+{
+  global $prefixeTable;
+  include_once(dirname(__FILE__) . '/struct.php');
+  $tag_id = (int)$tag_id;
+  $t = $prefixeTable . 'facetag_person_tags';
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', $t)) . '\';');
+  if (pwg_db_num_rows($r) === 0)
+  {
+    return array('ok' => false, 'error' => 'Aucune liste de visages (face_tag / face_tag_editor non installé) : rien à corriger.');
+  }
+  $over = tagmanager_face_registry_overridden();
+  if (!isset($over[$tag_id]))
+  {
+    return array('ok' => false, 'error' => 'Ce tag n\'est pas marqué comme visage, ou ses photos ne le rangent pas hors de « Personnes ».');
+  }
+  $name = query2array('SELECT name FROM ' . TAGS_TABLE . ' WHERE id = ' . $tag_id . ';', null, 'name');
+  $name = $name ? $name[0] : '';
+  $scan = tagmanager_usage_scan($tag_id, $name, 300);
+  if (!empty($scan['person']) || !empty($scan['both']))
+  {
+    tagmanager_ensure_homonym_table();
+    $any = !empty($scan['both']) ? $scan['both'][0] : $scan['person'][0];
+    tagmanager_record_homonym($tag_id, $scan['person_path'], $any, time());
+    $n = count($scan['person']) + count($scan['both']);
+    return array('ok' => false, 'homonym' => true, 'error' => '« ' . $name . ' » est bien une personne sur ' . $n . ' photo(s) (' . str_replace('|', ' › ', $scan['person_path']) . ') : ce n\'est pas une erreur de la liste des visages, mais un même nom pour une personne et un tag ordinaire. La ligne propose maintenant « Séparer ».');
+  }
+  pwg_query('DELETE FROM `' . $t . '` WHERE tag_id = ' . $tag_id . ' AND is_face_tag = 1;');
+  return array('ok' => true, 'name' => $name, 'read' => $scan['read'], 'total' => $scan['total']);
 }
 
 // ---------------------------------------------------------------------------------------------

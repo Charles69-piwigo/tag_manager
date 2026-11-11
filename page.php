@@ -51,6 +51,7 @@ $template->assign(array(
   'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
   'TM_JS_V' => @filemtime(TAGMANAGER_PATH . 'js/app.js'),
   'TM_PUBLIC' => true,
+  'TM_GALLERY' => get_absolute_root_url(),
   'TM_LEVEL' => $tm_level,
   'TM_HOME' => get_absolute_root_url() . 'index.php',
   'TM_LANG' => str_replace('_', '-', substr($user['language'], 0, 2)),
