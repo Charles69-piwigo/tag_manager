@@ -18,6 +18,7 @@ version 1.3 - 11/11/2026 - regroupe 1.2.1 à 1.2.5
     ajouté : « Gérer les tags » : panneaux « Créer un tag » et « Créer un groupe » (groupe possible au premier niveau)
     ajouté : clic droit dans les arbres : déplier / replier la ligne cliquée et ses sous-niveaux
     corrigé : titres des fenêtres invisibles (l'administration de Piwigo masque les h2)
+    corrigé : « Déplacer… » (tag ou groupe) ne proposait que le groupe actuel (champ pré-rempli, que la liste du navigateur prenait pour un filtre) : champ vide, emplacement actuel affiché au-dessus, « (racine) » proposé pour un groupe, un groupe n'est plus proposé dans lui-même, refus si la destination est l'emplacement actuel
 
 version 1.2.5 - 11/11/2026
     ajouté : le menu du clic droit des arbres (Albums, Tags, Tags de la sélection, Gérer les tags) propose aussi « Déplier « X » » et « Replier « X » » pour la ligne cliquée : la branche entière (la ligne et tous ses sous-niveaux) ; « Tout déplier / Tout replier » restent en dessous. Sur une ligne sans sous-niveau, seul « Tout … » est proposé

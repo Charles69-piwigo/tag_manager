@@ -117,6 +117,8 @@
   const isLeafKey = k => { const n = k.split('|').pop(); return !!tagPath[n] && tagPath[n].join('|') === k; };
   const tagSum = key => leavesUnder(key).reduce((s, n) => s + (TAGN[n] || 0), 0);
   const human = k => k ? k.split('|').join(' › ') : '(racine)';
+  /** Même chemin, en ignorant casse et accents (comme MySQL / tagmanager_fold). */
+  const tagmanagerSame = (a, b) => { const f = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); return f(a) === f(b); };
 
   // ---------- photos ----------
   const eff = p => {
@@ -712,8 +714,9 @@
         () => { const v = $('#gin').value.trim(), b = nameBad(v); if (b) { return b; } structFocus = (FLAT[name] ? '(sans chemin)' : parent) + (FLAT[name] || parent ? '|' : '') + v; return [{ type: 'rename', tag: name, name: v }]; });
     } else if (op === 'place') {
       structDialog(FLAT[name] ? 'Ranger « ' + name + ' » dans un groupe' : 'Déplacer « ' + name + ' »',
-        '<div>Groupe d’accueil (chemin complet, par exemple <span class="mono">ALBUM|2024 SLOVENIE</span>) :</div>' + inp('gin', FLAT[name] ? '' : parent, 'ALBUM|…', 'dl-g') + dl,
-        () => { const v = $('#gin').value.trim(); if (!v) { return 'Choisissez un groupe d’accueil.'; } structFocus = v + '|' + name; return [{ type: 'place', tag: name, group: v }]; });
+        (FLAT[name] ? '' : '<div style="color:var(--muted)">Actuellement : <b style="color:var(--fg)">' + esc(human(parent)) + '</b></div>') +
+        '<div>Groupe d’accueil (chemin complet, par exemple <span class="mono">ALBUM|2024 SLOVENIE</span>) :</div>' + inp('gin', '', 'Tapez une partie du nom ou choisissez dans la liste', 'dl-g') + dl,
+        () => { const v = $('#gin').value.trim(); if (!v) { return 'Choisissez un groupe d’accueil.'; } if (!FLAT[name] && tagmanagerSame(v, parent)) { return 'Le tag est déjà dans ce groupe.'; } structFocus = v + '|' + name; return [{ type: 'place', tag: name, group: v }]; });
     } else if (op === 'merge') {
       structDialog('Fusionner « ' + name + ' »',
         '<div>Fusionner dans le tag :</div>' + inp('gin', '', 'Nom d’un tag existant', 'dl-t') + '<datalist id="dl-t">' + validTags().filter(t => t !== name).map(t => '<option value="' + esc(t) + '">').join('') + '</datalist>' +
@@ -727,8 +730,12 @@
       structDialog('Renommer le groupe', '<div>Nouveau nom pour <b>' + esc(name) + '</b></div>' + inp('gin', name),
         () => { const v = $('#gin').value.trim(), b = nameBad(v); if (b) { return b; } structFocus = (parent ? parent + '|' : '') + v; return [{ type: 'rename_group', group: key, name: v }]; });
     } else if (op === 'move_group') {
-      structDialog('Déplacer le groupe « ' + name + ' »', '<div>Nouveau parent (chemin complet, vide pour la racine) :</div>' + inp('gin', parent, 'ALBUM|…', 'dl-g') + dl,
-        () => { const v = $('#gin').value.trim(); structFocus = (v ? v + '|' : '') + name; return [{ type: 'move_group', group: key, target: v }]; });
+      const ROOT = '(racine)';
+      const dlg = '<datalist id="dl-g">' + (parent ? '<option value="' + ROOT + '">' : '') + groupKeys().filter(k => k !== key && k.indexOf(key + '|') !== 0).map(k => '<option value="' + esc(k) + '">').join('') + '</datalist>';
+      structDialog('Déplacer le groupe « ' + name + ' »',
+        '<div style="color:var(--muted)">Actuellement dans : <b style="color:var(--fg)">' + esc(parent ? human(parent) : ROOT) + '</b></div>' +
+        '<div>Nouveau parent (chemin complet, ou <span class="mono">' + ROOT + '</span>) :</div>' + inp('gin', '', 'Tapez une partie du nom ou choisissez dans la liste', 'dl-g') + dlg,
+        () => { let v = $('#gin').value.trim(); if (!v) { return 'Choisissez le nouveau parent.'; } if (v === ROOT) { v = ''; } if (tagmanagerSame(v, parent)) { return 'Le groupe est déjà à cet endroit.'; } structFocus = (v ? v + '|' : '') + name; return [{ type: 'move_group', group: key, target: v }]; });
     }
   }
 
