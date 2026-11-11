@@ -11,6 +11,18 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.4 - 11/11/2026 - regroupe 1.3.1
+    modifié : « Étiqueter › Albums » montre les albums de la galerie (synchronisés et créés dans Piwigo) dans l'ordre de « Gestion des albums », au lieu des répertoires physiques et du faux album « upload / année / mois » ; une photo apparaît dans chaque album où elle est rangée, qu'elle vienne de galleries ou d'un envoi (upload)
+    ajouté : « Photos orphelines » en fin d'arbre (webmestres seulement) ; albums sans photo JPEG grisés ; icône ⟳ et mention dans la barre d'outils pour les albums SmartAlbums (contenu calculé d'après les tags)
+    modifié : par tag, bandeaux et liste « Albums » de la fiche par album de rattachement (album de stockage, sinon le premier de ses albums dans l'arbre, albums ordinaires avant les SmartAlbums)
+    ajouté : icône ⚠ pour un SmartAlbum sans critère (SmartAlbums y range presque toute la galerie, ex. « 1979-1980 Maroc ») ou contenant plus de 80 % des photos ; jamais choisi comme album de rattachement
+
+version 1.3.1 - 11/11/2026
+    modifié : « Étiqueter › Albums » montre les albums de la galerie (synchronisés et créés dans Piwigo) dans l'ordre de « Gestion des albums », au lieu des répertoires physiques et du faux album « upload / année / mois » ; une photo apparaît dans chaque album où elle est rangée, qu'elle vienne de galleries ou d'un envoi (upload)
+    ajouté : « Photos orphelines » en fin d'arbre (webmestres seulement) ; albums sans photo JPEG grisés ; icône ⟳ et mention dans la barre d'outils pour les albums SmartAlbums (contenu calculé d'après les tags)
+    modifié : par tag, bandeaux et liste « Albums » de la fiche par album de rattachement (album de stockage, sinon le premier de ses albums dans l'arbre, albums ordinaires avant les SmartAlbums)
+    ajouté : icône ⚠ pour un SmartAlbum sans critère (SmartAlbums y range presque toute la galerie, ex. « 1979-1980 Maroc ») ou contenant plus de 80 % des photos ; jamais choisi comme album de rattachement
+
 version 1.3 - 11/11/2026 - regroupe 1.2.1 à 1.2.5
     modifié : « À réconcilier » en langage courant, une ligne par nom partagé entre une personne et un tag ordinaire
     ajouté : « Séparer » (personne et tag ordinaire de même nom : le tag ordinaire prend un autre nom, la personne garde le sien) et « Ce n'est pas un visage » (tag marqué visage par face_tag à tort, retiré de la liste des visages après relecture des fichiers)

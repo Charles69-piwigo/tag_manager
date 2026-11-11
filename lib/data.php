@@ -180,25 +180,6 @@ function tagmanager_sql_not_face($tag_col)
 // Albums physiques et tags
 // ---------------------------------------------------------------------------------------------
 
-/** Albums physiques (répertoires réels) avec le nombre de photos rangées directement dedans. */
-// Photos envoyées par l'interface de Piwigo (./upload) : pas de répertoire d'album, donc un album virtuel -1.
-define('TAGMANAGER_UPLOAD_ALBUM', -1);
-define('TAGMANAGER_UPLOAD_SQL', "storage_category_id IS NULL AND path LIKE './upload/%'");
-define('TAGMANAGER_UPLOAD_MONTH_RE', "path REGEXP '^[.]/upload/[0-9]{4}/[0-9]{2}/'");
-
-/**
- * Album virtuel d'upload -> condition SQL sur images (sans préfixe de table).
- * -1 = racine (photos hors année/mois), -AAAA = année, -AAAAMM = mois.
- */
-function tagmanager_upload_cond($id)
-{
-  $n = -intval($id);
-  if ($n === 1) { return '(' . TAGMANAGER_UPLOAD_SQL . ' AND NOT ' . TAGMANAGER_UPLOAD_MONTH_RE . ')'; }
-  if ($n >= 1000 && $n <= 9999) { return "(storage_category_id IS NULL AND path REGEXP '^[.]/upload/" . $n . "/[0-9]{2}/')"; }
-  if ($n >= 100000 && $n <= 999999) { return "(storage_category_id IS NULL AND path LIKE './upload/" . intdiv($n, 100) . '/' . sprintf('%02d', $n % 100) . "/%')"; }
-  return '(0)';
-}
-
 /**
  * Condition SQL « photo visible par l'utilisateur courant » sur la table des images d'alias $alias,
  * selon les mécanismes de Piwigo (albums interdits, niveau de confidentialité, accès aux images).
@@ -231,85 +212,198 @@ function tagmanager_visible_sql($alias = 'i')
   return '(' . implode(' AND ', $conds) . ')';
 }
 
+/**
+ * Albums tels que la galerie les montre (« Gestion des albums ») : albums synchronisés depuis galleries et
+ * albums créés dans Piwigo (où arrivent les photos envoyées par upload), dans l'ordre de l'arbre. Une photo
+ * appartient à tous les albums auxquels elle est associée (image_category), quel que soit son fichier.
+ * Photos sans aucun album (« orphelines ») : album fictif -1, webmestres seulement.
+ */
+define('TAGMANAGER_ORPHANS', -1);
+
+/** Albums interdits à l'utilisateur courant (clés), aucun pour un webmestre. */
+function tagmanager_forbidden_albums()
+{
+  global $user;
+  if (is_webmaster() || empty($user['forbidden_categories']))
+  {
+    return array();
+  }
+  return array_flip(array_map('intval', explode(',', $user['forbidden_categories'])));
+}
+
+/**
+ * Position de chaque album dans l'arbre de « Gestion des albums » (id => rang 0, 1, 2…).
+ * global_rank est un texte (« 1.10 » avant « 1.2 » en SQL) : tri en PHP, segment par segment.
+ */
+function tagmanager_album_order()
+{
+  static $order = null;
+  if ($order !== null)
+  {
+    return $order;
+  }
+  $rows = query2array('SELECT id, global_rank FROM ' . CATEGORIES_TABLE . ';');
+  foreach ($rows as $k => $r)
+  {
+    $rows[$k]['r'] = ($r['global_rank'] === null || $r['global_rank'] === '') ? array(PHP_INT_MAX) : array_map('intval', explode('.', (string)$r['global_rank']));
+  }
+  usort($rows, function ($x, $y)
+  {
+    $rx = $x['r']; $ry = $y['r'];
+    for ($k = 0; $k < min(count($rx), count($ry)); $k++)
+    {
+      if ($rx[$k] !== $ry[$k]) { return $rx[$k] < $ry[$k] ? -1 : 1; }
+    }
+    if (count($rx) !== count($ry)) { return count($rx) < count($ry) ? -1 : 1; }
+    return (int)$x['id'] - (int)$y['id'];
+  });
+  $order = array();
+  foreach ($rows as $k => $r)
+  {
+    $order[(int)$r['id']] = $k;
+  }
+  return $order;
+}
+
+/**
+ * Albums SmartAlbums (contenu calculé d'après les tags) : id => 1, ou 2 s'il n'a plus aucun critère (seulement
+ * les lignes « mode » / « limit ») : SmartAlbums construit alors une requête sans WHERE et y range presque toutes
+ * les photos de la galerie (cas « 1979-1980 Maroc » sur photodev2). Vide si le plugin est absent.
+ */
+function tagmanager_smart_albums()
+{
+  global $prefixeTable;
+  static $smart = null;
+  if ($smart !== null)
+  {
+    return $smart;
+  }
+  $smart = array();
+  $t = $prefixeTable . 'category_filters';
+  if (!pwg_db_num_rows(pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string($t) . '\';')))
+  {
+    return $smart;
+  }
+  $res = pwg_query('SELECT category_id AS c, SUM(type NOT IN (\'mode\', \'limit\')) AS rules FROM ' . $t . ' GROUP BY category_id;');
+  while ($r = pwg_db_fetch_assoc($res))
+  {
+    $smart[(int)$r['c']] = (int)$r['rules'] > 0 ? 1 : 2;
+  }
+  return $smart;
+}
+
+/**
+ * Condition SQL « photo sans aucun album » sur la table des images d'alias $alias.
+ */
+function tagmanager_orphan_sql($alias = 'i')
+{
+  return 'NOT EXISTS (SELECT 1 FROM ' . IMAGE_CATEGORY_TABLE . ' tmo WHERE tmo.image_id = ' . $alias . '.id)';
+}
+
 function tagmanager_data_albums()
 {
   $vis = tagmanager_visible_sql('i');
-  $visAnd = $vis === '' ? '' : ' AND ' . $vis;
+  $forb = tagmanager_forbidden_albums();
+  $smart = tagmanager_smart_albums();
 
-  $rows = query2array('
-SELECT id, name, id_uppercat
-  FROM ' . CATEGORIES_TABLE . '
-  WHERE dir IS NOT NULL
-;');
-
+  $rows = query2array('SELECT id, name, id_uppercat FROM ' . CATEGORIES_TABLE . ';', 'id');
+  // photos visibles associées directement à chaque album (les sous-albums sont additionnés par le navigateur)
   $counts = query2array('
-SELECT i.storage_category_id AS c, COUNT(*) AS n
-  FROM ' . IMAGES_TABLE . ' i
-  WHERE i.storage_category_id IS NOT NULL' . $visAnd . '
-  GROUP BY i.storage_category_id
+SELECT ic.category_id AS c, COUNT(DISTINCT i.id) AS n
+  FROM ' . IMAGE_CATEGORY_TABLE . ' ic JOIN ' . IMAGES_TABLE . ' i ON i.id = ic.image_id
+  WHERE ' . $vis . '
+  GROUP BY ic.category_id
 ;', 'c', 'n');
 
+  // SmartAlbum « inondé » : critères perdus ou ne désignant plus rien (ex. « pas dans l'album X » avec X
+  // supprimé) -> il contient l'essentiel de la galerie
+  $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGES_TABLE . ' i WHERE ' . $vis . ';'));
+  $all = (int)$row[0];
+
   $out = array();
-  foreach ($rows as $r)
+  foreach (tagmanager_album_order() as $id => $rank)
   {
-    $out[] = array(
-      'id' => (int)$r['id'],
-      'name' => $r['name'],
-      'parent' => $r['id_uppercat'] === null ? null : (int)$r['id_uppercat'],
-      'n' => isset($counts[$r['id']]) ? (int)$counts[$r['id']] : 0,
+    if (!isset($rows[$id]) || isset($forb[$id]))
+    {
+      continue;
+    }
+    $r = $rows[$id];
+    $par = $r['id_uppercat'] === null ? null : (int)$r['id_uppercat'];
+    $n = isset($counts[$id]) ? (int)$counts[$id] : 0;
+    $a = array(
+      'id' => $id,
+      'name' => strip_tags(trigger_change('render_category_name', $r['name'], 'tag_manager')),
+      'parent' => ($par !== null && !isset($forb[$par])) ? $par : null,
+      'n' => $n,
+      'smart' => isset($smart[$id]),
     );
+    if (isset($smart[$id]) && ($smart[$id] === 2 || ($all > 100 && $n >= 0.8 * $all)))
+    {
+      $a['broken'] = $smart[$id] === 2 ? 'norule' : 'flood';
+    }
+    $out[] = $a;
   }
 
-  // Les répertoires physiques ne sont pas les albums de la galerie : un utilisateur peut y voir des photos
-  // par ses albums virtuels sans avoir le droit sur le répertoire. On garde donc les répertoires qui
-  // contiennent (eux ou leurs sous-répertoires) au moins une photo visible ; les compteurs, déjà
-  // filtrés, ne comptent que les photos visibles.
-  if (!is_webmaster())
+  // les orphelines ne sont visibles que des webmestres (la galerie ne les montre à personne d'autre)
+  if (is_webmaster())
   {
-    $kids = array();
-    foreach ($out as $k => $a)
-    {
-      $kids[$a['parent'] === null ? 0 : $a['parent']][] = $k;
-    }
-    $keep = array();
-    $tot = function ($k) use (&$tot, &$keep, $out, $kids)
-    {
-      $n = $out[$k]['n'];
-      foreach (isset($kids[$out[$k]['id']]) ? $kids[$out[$k]['id']] : array() as $c)
-      {
-        $n += $tot($c);
-      }
-      if ($n > 0) { $keep[$k] = true; }
-      return $n;
-    };
-    foreach (isset($kids[0]) ? $kids[0] : array() as $k)
-    {
-      $tot($k);
-    }
-    $out = array_values(array_intersect_key($out, $keep));
+    $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGES_TABLE . ' i WHERE ' . tagmanager_orphan_sql('i') . ' AND ' . $vis . ';'));
+    $out[] = array('id' => TAGMANAGER_ORPHANS, 'name' => 'Photos orphelines', 'parent' => null, 'n' => (int)$row[0], 'smart' => false, 'orphans' => true);
   }
+  return $out;
+}
 
-  $months = query2array('
-SELECT SUBSTRING(path, 10, 4) AS y, SUBSTRING(path, 15, 2) AS m, COUNT(*) AS n
-  FROM ' . IMAGES_TABLE . ' i
-  WHERE ' . TAGMANAGER_UPLOAD_SQL . ' AND ' . TAGMANAGER_UPLOAD_MONTH_RE . $visAnd . '
-  GROUP BY y, m
+/**
+ * Album de rattachement de chaque photo (bandeaux de la vue par tag, liste « Albums » de la fiche) :
+ * son album de stockage s'il est visible (photo synchronisée), sinon le premier de ses albums dans l'ordre
+ * de l'arbre, en passant les albums ordinaires avant les SmartAlbums, et un SmartAlbum sans critère en
+ * dernier ; null = aucun album visible (orpheline).
+ *
+ * @return array id => array('id', 'alb', 'd')
+ */
+function tagmanager_home_albums($from, $where)
+{
+  $order = tagmanager_album_order();
+  $smart = tagmanager_smart_albums();
+  $big = count($order) + 1;
+  foreach ($smart as $c => $kind)
+  {
+    if (isset($order[$c])) { $order[$c] += $kind * $big; }
+  }
+  $forb = tagmanager_forbidden_albums();
+  $res = pwg_query('
+SELECT i.id, i.storage_category_id AS s, i.date_creation AS d, ic.category_id AS c
+  FROM ' . $from . ' LEFT JOIN ' . IMAGE_CATEGORY_TABLE . ' ic ON ic.image_id = i.id
+  WHERE ' . $where . '
 ;');
-  $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGES_TABLE . ' i WHERE ' . TAGMANAGER_UPLOAD_SQL . $visAnd . ';'));
-  $in_months = 0;
-  $years = array();
-  foreach ($months as $r)
+  $out = array();
+  $stored = array();
+  while ($r = pwg_db_fetch_assoc($res))
   {
-    $y = (int)$r['y'];
-    $years[$y] = true;
-    $in_months += (int)$r['n'];
-    $out[] = array('id' => -($y * 100 + (int)$r['m']), 'name' => $r['y'] . '-' . $r['m'], 'parent' => -$y, 'n' => (int)$r['n']);
+    $id = (int)$r['id'];
+    if (!isset($out[$id]))
+    {
+      $out[$id] = array('id' => $id, 'alb' => null, 'd' => $r['d']);
+    }
+    if ($r['c'] === null || isset($stored[$id]))
+    {
+      continue;
+    }
+    $c = (int)$r['c'];
+    if (isset($forb[$c]) || !isset($order[$c]))
+    {
+      continue;
+    }
+    if ($r['s'] !== null && (int)$r['s'] === $c)
+    {
+      $out[$id]['alb'] = $c;
+      $stored[$id] = true;
+    }
+    elseif ($out[$id]['alb'] === null || $order[$c] < $order[$out[$id]['alb']])
+    {
+      $out[$id]['alb'] = $c;
+    }
   }
-  foreach (array_keys($years) as $y)
-  {
-    $out[] = array('id' => -$y, 'name' => (string)$y, 'parent' => TAGMANAGER_UPLOAD_ALBUM, 'n' => 0);
-  }
-  $out[] = array('id' => TAGMANAGER_UPLOAD_ALBUM, 'name' => 'upload', 'parent' => null, 'n' => (int)$row[0] - $in_months);
   return $out;
 }
 
@@ -369,13 +463,12 @@ function tagmanager_data_photos($mode, array $ids, $offset, $limit)
   if ($mode === 'album')
   {
     $from = IMAGES_TABLE . ' i';
-    $real = array_values(array_filter($ids, function ($v) { return $v > 0; }));
+    // photos associées à l'album (image_category), qu'elles viennent de galleries ou d'un upload
+    $forb = tagmanager_forbidden_albums();
+    $real = array_values(array_filter($ids, function ($v) use ($forb) { return $v > 0 && !isset($forb[$v]); }));
     $conds = array();
-    if ($real) { $conds[] = 'i.storage_category_id IN (' . implode(',', $real) . ')'; }
-    foreach ($ids as $v)
-    {
-      if ($v < 0) { $conds[] = tagmanager_upload_cond($v); }
-    }
+    if ($real) { $conds[] = 'EXISTS (SELECT 1 FROM ' . IMAGE_CATEGORY_TABLE . ' tma WHERE tma.image_id = i.id AND tma.category_id IN (' . implode(',', $real) . '))'; }
+    if (in_array(TAGMANAGER_ORPHANS, $ids, true) && is_webmaster()) { $conds[] = tagmanager_orphan_sql('i'); }
     if (!$conds) { return array('total' => 0, 'photos' => array()); }
     $where = '(' . implode(' OR ', $conds) . ')';
   }
@@ -394,6 +487,7 @@ function tagmanager_data_photos($mode, array $ids, $offset, $limit)
   $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(DISTINCT i.id) FROM ' . $from . ' WHERE ' . $where . ';'));
   $total = (int)$row[0];
 
+  $home = array();
   if ($mode === 'album')
   {
     $imgs = query2array('
@@ -406,31 +500,19 @@ SELECT DISTINCT i.*
   }
   else
   {
-    // Par tag : photos regroupées par album, dans l'ordre de l'arbre des albums (bandeaux d'album dans la
-    // grille). global_rank est un texte (« 1.10 » avant « 1.2 » en SQL) : tri en PHP, segment par segment.
-    $all = query2array('SELECT DISTINCT i.id, i.storage_category_id AS cat, i.date_creation AS d FROM ' . $from . ' WHERE ' . $where . ';');
-    $cats = array();
-    foreach ($all as $a) { if ($a['cat'] !== null) { $cats[(int)$a['cat']] = true; } }
-    $rank = array();
-    if (!empty($cats))
+    // Par tag : photos regroupées par album de rattachement, dans l'ordre de l'arbre des albums (bandeaux
+    // d'album dans la grille) ; orphelines à la fin.
+    $all = array_values(tagmanager_home_albums($from, $where));
+    $order = tagmanager_album_order();
+    usort($all, function ($x, $y) use ($order)
     {
-      foreach (query2array('SELECT id, global_rank FROM ' . CATEGORIES_TABLE . ' WHERE id IN (' . implode(',', array_keys($cats)) . ');') as $c)
-      {
-        $rank[(int)$c['id']] = array_map('intval', explode('.', (string)$c['global_rank']));
-      }
-    }
-    usort($all, function ($x, $y) use ($rank)
-    {
-      $rx = ($x['cat'] !== null && isset($rank[(int)$x['cat']])) ? $rank[(int)$x['cat']] : array(PHP_INT_MAX);
-      $ry = ($y['cat'] !== null && isset($rank[(int)$y['cat']])) ? $rank[(int)$y['cat']] : array(PHP_INT_MAX);
-      for ($k = 0; $k < min(count($rx), count($ry)); $k++)
-      {
-        if ($rx[$k] !== $ry[$k]) { return $rx[$k] < $ry[$k] ? -1 : 1; }
-      }
-      if (count($rx) !== count($ry)) { return count($rx) < count($ry) ? -1 : 1; }
+      $rx = $x['alb'] !== null ? $order[$x['alb']] : PHP_INT_MAX;
+      $ry = $y['alb'] !== null ? $order[$y['alb']] : PHP_INT_MAX;
+      if ($rx !== $ry) { return $rx < $ry ? -1 : 1; }
       if ((string)$x['d'] !== (string)$y['d']) { return strcmp((string)$x['d'], (string)$y['d']); }
-      return (int)$x['id'] - (int)$y['id'];
+      return $x['id'] - $y['id'];
     });
+    foreach ($all as $a) { $home[$a['id']] = $a['alb']; }
     $page_ids = array();
     foreach (array_slice($all, $offset, $limit) as $a) { $page_ids[] = (int)$a['id']; }
     $imgs = array();
@@ -469,7 +551,7 @@ SELECT DISTINCT i.*
     $photos[] = array(
       'id' => $id,
       'file' => $i['file'],
-      'alb' => $i['storage_category_id'] === null ? null : (int)$i['storage_category_id'],
+      'alb' => isset($home[$id]) ? $home[$id] : null,
       'thumb' => DerivativeImage::url($thumb_type, $i),
       'tags' => isset($tags_of[$id]) ? $tags_of[$id] : array(),
     );
@@ -490,27 +572,22 @@ function tagmanager_data_tag_albums(array $tag_ids)
   $vis = tagmanager_visible_sql('i');
   $visAnd = $vis === '' ? '' : ' AND ' . $vis;
 
-  $row = pwg_db_fetch_row(pwg_query('
-SELECT COUNT(DISTINCT it.image_id)
-  FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id
-  WHERE it.tag_id IN (' . $in . ')' . $visAnd . '
-;'));
-
-  $albums = query2array('
-SELECT i.storage_category_id AS alb, COUNT(DISTINCT i.id) AS n
-  FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id
-  WHERE it.tag_id IN (' . $in . ')' . $visAnd . '
-  GROUP BY i.storage_category_id
-  ORDER BY n DESC
-  LIMIT 50
-;');
+  // chaque photo compte une fois, dans son album de rattachement (comme les bandeaux de la vue par tag)
+  $home = tagmanager_home_albums(IMAGES_TABLE . ' i JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = i.id', 'it.tag_id IN (' . $in . ')' . $visAnd);
+  $count = array();
+  foreach ($home as $h)
+  {
+    $k = $h['alb'] === null ? 0 : $h['alb'];
+    $count[$k] = isset($count[$k]) ? $count[$k] + 1 : 1;
+  }
+  arsort($count);
 
   $out = array();
-  foreach ($albums as $a)
+  foreach (array_slice($count, 0, 50, true) as $alb => $n)
   {
-    $out[] = array('alb' => $a['alb'] === null ? null : (int)$a['alb'], 'n' => (int)$a['n']);
+    $out[] = array('alb' => $alb === 0 ? null : (int)$alb, 'n' => (int)$n);
   }
-  return array('total' => (int)$row[0], 'albums' => $out);
+  return array('total' => count($home), 'albums' => $out);
 }
 
 // ---------------------------------------------------------------------------------------------

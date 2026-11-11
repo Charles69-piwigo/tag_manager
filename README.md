@@ -14,7 +14,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 
 ### Fonctionnalités
 
-- **Étiqueter** : navigation par albums physiques (répertoires) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ». Par tag, les photos sont regroupées par album, avec un bandeau qui indique l'album. Au survol d'un album ou d'un tag, l'icône ↗ ouvre sa page dans la galerie (nouvel onglet).
+- **Étiqueter** : navigation par albums (ceux de la galerie, dans l'ordre de « Gestion des albums », que les photos viennent de la synchronisation ou d'un envoi par upload ; « Photos orphelines » pour les webmestres) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ». Par tag, les photos sont regroupées par album, avec un bandeau qui indique l'album. Au survol d'un album ou d'un tag, l'icône ↗ ouvre sa page dans la galerie (nouvel onglet).
 - **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; supprimer un groupe vide. Sous la fiche, deux panneaux « Créer un tag » et « Créer un groupe » (un groupe peut être créé au premier niveau). Chaque opération passe par un aperçu chiffré calculé par le serveur.
 - **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier. Deux cas liés aux visages ont leur propre ligne, en langage courant :
   - un même nom pour une personne et un tag ordinaire : **Séparer** donne un autre nom au tag ordinaire (fichiers et Piwigo), la personne garde le sien ;
@@ -28,7 +28,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 ### Limites
 
 - **JPEG uniquement** (`.jpg`, `.jpeg`). Les PNG, vidéos, etc. n'ont pas de métadonnées exploitables ici et ne sont ni listés ni acceptés ; ils restent à étiqueter par la méthode standard de Piwigo.
-- Albums **physiques** seulement (répertoires réels) ; les albums virtuels ne sont pas gérés.
+- Les albums SmartAlbums sont marqués ⟳ : leur contenu dépend des tags. Un SmartAlbum sans critère valable (qui contient presque toute la galerie) est marqué ⚠.
 - Mots-clés IPTC limités à 64 octets ; paquet XMP de plus de 64 Ko refusé ; XMP étendu non géré. Le point-virgule est interdit dans un nom de tag (séparateur d’Exif XPKeywords).
 - PHP doit pouvoir **écrire** dans les fichiers (et créer des fichiers temporaires dans leur répertoire).
 
@@ -71,7 +71,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 
 ### Features
 
-- **Tag photos**: browse by physical albums (real directories) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply". When browsing by tag, photos are grouped by album, each group with a banner naming the album. Hovering an album or a tag shows a ↗ icon that opens its gallery page in a new tab.
+- **Tag photos**: browse by albums (the gallery's albums, in the « Manage albums » order, whether photos come from synchronization or upload; « Orphan photos » for webmasters) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply". When browsing by tag, photos are grouped by album, each group with a banner naming the album. Hovering an album or a tag shows a ↗ icon that opens its gallery page in a new tab.
 - **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; delete an empty group. Below the details pane, two side-by-side boxes "Create a tag" and "Create a group" (a group can be created at the top level). Every operation goes through a server-computed preview with counts.
 - **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file. Two face-related cases get their own plain-language line:
   - the same name used for a person and for an ordinary tag: **Separate** gives the ordinary tag another name (files and Piwigo), the person keeps theirs;
@@ -85,7 +85,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 ### Limitations
 
 - **JPEG only** (`.jpg`, `.jpeg`). PNG, videos, etc. have no usable metadata here and are neither listed nor accepted; tag them with Piwigo's standard method.
-- **Physical** albums only (real directories); virtual albums are not handled.
+- SmartAlbums albums are marked ⟳: their content depends on tags. A SmartAlbum with no valid criterion (holding almost the whole gallery) is marked ⚠.
 - IPTC keywords are limited to 64 bytes; XMP packets over 64 KB are refused; Extended XMP is not handled. A semicolon is not allowed in a tag name (Exif XPKeywords separator).
 - PHP must be able to **write** to the files (and create temporary files in their directory).
 

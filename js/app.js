@@ -62,19 +62,23 @@
   // ---------- albums ----------
   function buildAlbums(list) {
     albMap = {};
-    list.forEach(a => { albMap[a.id] = { a: { id: a.id, name: a.name, n: a.n, ch: [] }, par: a.parent }; });
+    // le serveur renvoie les albums dans l'ordre de « Gestion des albums » (orphelines en dernier) : on le garde
+    list.forEach(a => { albMap[a.id] = { a: { id: a.id, name: a.name, n: a.n, smart: !!a.smart, broken: a.broken || '', orphans: !!a.orphans, ch: [] }, par: a.parent }; });
     ALB = [];
     list.forEach(a => {
       const e = albMap[a.id];
       if (a.parent && albMap[a.parent]) { albMap[a.parent].a.ch.push(e.a); } else { ALB.push(e.a); }
     });
-    const sortRec = l => { l.sort((x, y) => ncmp(x.name, y.name)); l.forEach(a => sortRec(a.ch)); };
-    sortRec(ALB);
     albTot = {};
     const tot = a => { let n = a.n; a.ch.forEach(c => { n += tot(c); }); albTot[a.id] = n; return n; };
     ALB.forEach(tot);
   }
   const albPath = id => { const r = []; let c = id; while (c && albMap[c]) { r.unshift(albMap[c].a.name); c = albMap[c].par; } return r; };
+  const SMART_TIP = 'Album SmartAlbums : son contenu est calculé d’après les tags. Ajouter ou retirer un tag peut faire entrer ou sortir des photos de cet album au prochain rafraîchissement.';
+  const BROKEN_TIP = {
+    norule: 'SmartAlbum sans critère : SmartAlbums y range presque toutes les photos de la galerie (son compte n’a pas de sens). À corriger dans SmartAlbums : redéfinir ses critères, ou décocher « SmartAlbum ».',
+    flood: 'SmartAlbum qui contient presque toute la galerie : un de ses critères ne désigne probablement plus rien (album ou tag supprimé). À vérifier dans SmartAlbums.'
+  };
   const albSub = id => { const r = [id]; ((albMap[id] && albMap[id].a.ch) || []).forEach(c => r.push.apply(r, albSub(c.id))); return r; };
 
   // ---------- tags ----------
@@ -205,9 +209,11 @@
     if (view.tab === 'albums') {
       const rec = l => '<ul class="tree">' + l.map(a => {
         const has = a.ch.length, open = !collapsed.has(String(a.id));
-        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + '" tabindex="0" data-alb="' + a.id + '"><span class="caret" data-car="' + a.id + '">' + (has ? (open ? '▼' : '▶') : '') + '</span><span class="nm" title="' + esc(a.name) + '">' + esc(a.name) + '</span><span class="cnt">' + albTot[a.id] + '</span>' + galLink(a.id > 0 ? 'index.php?/category/' + a.id : '', 'l’album') + '</div>' + (has && open ? rec(a.ch) : '') + '</li>';
+        const empty = !albTot[a.id];
+        const smart = a.broken ? '<span title="' + esc(BROKEN_TIP[a.broken]) + '" style="flex:none;margin-left:4px;color:#c0392b">⚠</span>' : a.smart ? '<span title="' + esc(SMART_TIP) + '" style="flex:none;margin-left:4px;color:var(--muted)">⟳</span>' : '';
+        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + '" tabindex="0" data-alb="' + a.id + '"' + (empty ? ' style="opacity:.5"' : '') + '><span class="caret" data-car="' + a.id + '">' + (has ? (open ? '▼' : '▶') : '') + '</span><span class="nm" title="' + esc(a.name) + (empty ? ' (aucune photo JPEG)' : '') + '"' + (a.orphans ? ' style="font-style:italic"' : '') + '>' + esc(a.name) + '</span>' + smart + '<span class="cnt">' + albTot[a.id] + '</span>' + galLink(a.id > 0 ? 'index.php?/category/' + a.id : '', 'l’album') + '</div>' + (has && open ? rec(a.ch) : '') + '</li>';
       }).join('') + '</ul>';
-      h = rec(ALB) + '<div class="hint">Répertoires physiques (liens symboliques vers le NAS). Les noms ne suivent pas les tags. ↗ (au survol) : ouvrir l’album dans la galerie.</div>';
+      h = rec(ALB) + '<div class="hint">Albums de la galerie, dans l’ordre de « Gestion des albums » : une photo apparaît dans chaque album où elle est rangée, qu’elle vienne de la synchronisation ou d’un envoi (upload). Grisé : aucune photo JPEG. ⟳ : album SmartAlbums (son contenu suit les tags) ; ⚠ : SmartAlbum sans critère valable. « Photos orphelines » : photos rangées dans aucun album. ↗ (au survol) : ouvrir l’album dans la galerie.</div>';
     } else {
       const rec = n => '<ul class="tree">' + kids(n).map(c => {
         const k2 = Object.keys(c.ch).length, open = !collapsed.has(c.key), leaf = isLeafNode(c);
@@ -219,9 +225,11 @@
   }
 
   function renderToolbar() {
-    let title = '', lastName = '', isLeaf = false, canDesc = false;
+    let title = '', lastName = '', isLeaf = false, canDesc = false, smartNote = false, brokenNote = false;
     if (view.tab === 'albums') {
       title = view.id ? albPath(view.id).join(' › ') : '';
+      smartNote = !!(view.id && albSub(view.id).some(id => albMap[id] && albMap[id].a.smart));
+      brokenNote = !!(view.id && albSub(view.id).some(id => albMap[id] && albMap[id].a.broken));
       canDesc = !!(view.id && albMap[view.id] && albMap[view.id].a.ch.length);
     } else {
       title = (view.key || '').split('|').join(' › ');
@@ -230,7 +238,7 @@
       canDesc = !isLeaf;
     }
     const shown = CUR.list.length;
-    let h = '<div class="crumb">' + esc(title) + '<small>' + (CUR.loading && !shown ? 'chargement…' : CUR.total + ' photos' + (CUR.total > PAGE ? ' · page ' + ((CUR.page || 0) + 1) + ' / ' + pageCount() : '') + ' · ' + sel.size + ' sélectionnée' + (sel.size > 1 ? 's' : '')) + '</small></div>';
+    let h = '<div class="crumb">' + esc(title) + '<small>' + (CUR.loading && !shown ? 'chargement…' : CUR.total + ' photos' + (CUR.total > PAGE ? ' · page ' + ((CUR.page || 0) + 1) + ' / ' + pageCount() : '') + ' · ' + sel.size + ' sélectionnée' + (sel.size > 1 ? 's' : '')) + (brokenNote ? ' · <span style="color:#c0392b" title="' + esc(BROKEN_TIP.norule) + '">⚠ SmartAlbum sans critère valable : contient presque toute la galerie</span>' : smartNote ? ' · <span title="' + esc(SMART_TIP) + '">⟳ SmartAlbums : le contenu suit les tags</span>' : '') + '</small></div>';
     if (canDesc) { h += '<label class="chk"><input type="checkbox" id="desc"' + (view.desc ? ' checked' : '') + '> Inclure les sous-niveaux</label>'; }
     h += '<button class="btn" id="selall">' + (CUR.total > PAGE ? 'Sélectionner la page' : 'Tout sélectionner') + '</button><button class="btn" id="selnone"' + (sel.size ? '' : ' disabled') + '>Désélectionner</button>';
     if (isLeaf) { h += '<button class="btn danger" id="rmtag"' + (sel.size ? '' : ' disabled') + '>Retirer « ' + esc(lastName) + ' » de la sélection</button>'; }
@@ -252,7 +260,7 @@
     let h = vis.map((p, k) => {
       let band = '';
       if (byAlb && (k === 0 || p.alb !== lastAlb)) {
-        const path = p.alb && albMap[p.alb] ? albPath(p.alb).join(' › ') : '(sans album)';
+        const path = p.alb && albMap[p.alb] ? albPath(p.alb).join(' › ') : 'Photos orphelines';
         band = '<div class="albh" title="' + esc(path) + '"><span class="albh-n">' + esc(path) + '</span><span class="cnt">' + albN[p.alb] + ' photo' + (albN[p.alb] > 1 ? 's' : '') + (k === 0 && CUR.page > 0 ? ' · suite' : '') + '</span></div>';
       }
       lastAlb = p.alb;
@@ -784,7 +792,7 @@
     api('tag_albums', { ids: lv.map(n => TAGID[n]).filter(Boolean).join(',') }).then(r => {
       if (seq !== ficheSeq) { return; }
       $('#f-n').textContent = r.total;
-      $('#f-alb').innerHTML = r.albums.map(a => '<li><span>' + esc(a.alb && albMap[a.alb] ? albPath(a.alb).join(' › ') : '(sans album)') + '</span><span class="cnt">' + a.n + '</span></li>').join('') || '<li><span style="color:var(--muted)">Aucune photo</span></li>';
+      $('#f-alb').innerHTML = r.albums.map(a => '<li><span>' + esc(a.alb && albMap[a.alb] ? albPath(a.alb).join(' › ') : 'Photos orphelines') + '</span><span class="cnt">' + a.n + '</span></li>').join('') || '<li><span style="color:var(--muted)">Aucune photo</span></li>';
     }).catch(() => { if (seq === ficheSeq) { $('#f-n').textContent = '?'; } });
   }
 
