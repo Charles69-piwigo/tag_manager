@@ -1,5 +1,7 @@
 <link rel="stylesheet" href="{$TM_ASSETS}css/app.css?v={$TM_CSS_V}">
 
+{* l'administration de Piwigo prend le PREMIER h2 de la page comme titre (admin.tpl) : sans celui-ci, c'était « Sauvegardes » (Paramètres) *}
+{if !$TM_PUBLIC}<div class="titrePage"><h2>Tag Manager</h2></div>{/if}
 <div id="tm-app"{if $TM_PUBLIC} class="full" data-public="1" data-level="{$TM_LEVEL}"{/if} data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-gallery="{$TM_GALLERY}">
 <div class="app">
   <div class="top">
@@ -22,6 +24,7 @@
         <button class="tab" role="tab" id="tab-albums" aria-selected="true" data-tab="albums">{'Albums'|@translate}</button>
         <button class="tab" role="tab" id="tab-tags" aria-selected="false" data-tab="tags">{'Tags'|@translate}</button>
       </div>
+      <div class="pf"><input id="tfilter" type="search" autocomplete="off" placeholder="{'Filtrer les albums…'|@translate}" aria-label="{'Filtrer l’arbre de navigation'|@translate}"></div>
       <div class="pane-b" id="tree"><div class="loading">…</div></div>
     </section>
 
@@ -79,7 +82,8 @@
           <div class="add" id="mnewgroup-box">
             <b>{'Créer un groupe'|@translate}</b>
             <input id="mg-name" class="fin" type="text" autocomplete="off" placeholder="{'Nom du nouveau groupe'|@translate}" aria-label="{'Nom du nouveau groupe'|@translate}">
-            <input id="mg-group" class="fin" type="text" autocomplete="off" list="dl-ntg" placeholder="{'Groupe parent (vide : premier niveau)'|@translate}" aria-label="{'Groupe parent du nouveau groupe, vide pour le premier niveau'|@translate}">
+            <datalist id="dl-mgg"></datalist>
+            <input id="mg-group" class="fin" type="text" autocomplete="off" list="dl-mgg" placeholder="{'Groupe parent (vide : premier niveau)'|@translate}" aria-label="{'Groupe parent du nouveau groupe, vide pour le premier niveau'|@translate}">
             <button class="btn" id="mg-go">{'Créer le groupe'|@translate}</button>
             <small>{'Un groupe vide n’existe que dans le plugin, jusqu’à ce qu’on y crée un tag.'|@translate}</small>
           </div>
@@ -135,7 +139,7 @@
           <dt>{'Gérer : créer'|@translate}</dt><dd>{'Écran « Gérer les tags », limité à la création de groupes et de tags.'|@translate}</dd>
           <dt>{'Gérer : tout'|@translate}</dt><dd>{'En plus : renommer, déplacer, fusionner et supprimer.'|@translate}</dd>
         </dl>
-        <p class="sub" style="margin:0">{'Ces droits seront appliqués par le serveur à l’étape d’écriture ; pour l’instant seuls les webmestres accèdent à cette page.'|@translate}</p>
+        <p class="sub" style="margin:0">{'Ces droits sont vérifiés par le serveur à chaque action. Les membres autorisés qui ne sont pas webmestres ouvrent le plugin avec le bouton « Tag manager » de la barre d’outils de la galerie ; l’onglet Paramètres reste réservé aux webmestres.'|@translate}</p>
       </section>
       <section class="card" aria-labelledby="h-log">
         <h2 id="h-log">{'Journal des écritures'|@translate}</h2>
@@ -148,4 +152,5 @@
 <div id="layer"></div>
 </div>
 
+<script>window.TM_I18N = {$TM_I18N};</script>
 <script src="{$TM_ASSETS}js/app.js?v={$TM_JS_V}"></script>

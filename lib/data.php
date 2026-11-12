@@ -5,6 +5,8 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/i18n.php');
+
 include_once(dirname(__FILE__) . '/names.php');
 include_once(dirname(__FILE__) . '/file_resolver.php');
 include_once(dirname(__FILE__) . '/xmp_reader.php');
@@ -293,6 +295,60 @@ function tagmanager_smart_albums()
 }
 
 /**
+ * Mise à jour d'un SmartAlbum depuis l'écran Étiqueter (icône ⟳) : SmartAlbums recalcule le contenu d'un album
+ * d'après ses critères avec smart_make_associations() (le même appel que son bouton « Régénérer »).
+ * Seules les associations « smart » changent ; les photos rangées à la main dans l'album restent.
+ *  = false : aperçu sans écriture (smart_get_pictures() ne fait que lire).
+ */
+function tagmanager_smart_refresh($cat_id, $apply)
+{
+  $cat_id = (int)$cat_id;
+  $smart = tagmanager_smart_albums();
+  if (!function_exists('smart_make_associations') || !function_exists('smart_get_pictures') || !defined('CATEGORY_FILTERS_TABLE'))
+  {
+    return array('ok' => false, 'error' => tagmanager_t('Le plugin SmartAlbums n\'est pas actif.'));
+  }
+  $forb = tagmanager_forbidden_albums();
+  if (!isset($smart[$cat_id]) || isset($forb[$cat_id]))
+  {
+    return array('ok' => false, 'error' => tagmanager_t('Cet album n\'est pas un SmartAlbum.'));
+  }
+  if ($smart[$cat_id] === 2)
+  {
+    return array('ok' => false, 'error' => tagmanager_t('Ce SmartAlbum n\'a aucun critère : sa mise à jour y rangerait presque toute la galerie. Corrigez d\'abord ses critères dans SmartAlbums.'));
+  }
+  @set_time_limit(120);
+
+  // colonne ENUM('true','false') de SmartAlbums : comparer au texte (« smart = false » ne trouve aucune ligne)
+  $before = array_map('intval', query2array('SELECT image_id FROM ' . IMAGE_CATEGORY_TABLE . ' WHERE category_id = ' . $cat_id . ' AND smart = \'true\';', null, 'image_id'));
+  $manual = (int)pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_CATEGORY_TABLE . ' WHERE category_id = ' . $cat_id . ' AND smart <> \'true\';'))[0];
+  $after = $apply ? smart_make_associations($cat_id) : smart_get_pictures($cat_id);
+  $after = array_values(array_unique(array_map('intval', is_array($after) ? $after : array())));
+
+  if ($apply)
+  {
+    // comme SmartAlbums après une régénération : vider le cache sans relancer le calcul de tous les SmartAlbums
+    if (!defined('SMART_NOT_UPDATE'))
+    {
+      define('SMART_NOT_UPDATE', 1);
+    }
+    invalidate_user_cache();
+  }
+
+  $name = query2array('SELECT name FROM ' . CATEGORIES_TABLE . ' WHERE id = ' . $cat_id . ';', null, 'name');
+  return array(
+    'ok' => true,
+    'applied' => (bool)$apply,
+    'name' => $name ? strip_tags(trigger_change('render_category_name', $name[0], 'tag_manager')) : '',
+    'before' => count($before),
+    'after' => count($after),
+    'added' => count(array_diff($after, $before)),
+    'removed' => count(array_diff($before, $after)),
+    'manual' => $manual,
+  );
+}
+
+/**
  * Condition SQL « photo sans aucun album » sur la table des images d'alias $alias.
  */
 function tagmanager_orphan_sql($alias = 'i')
@@ -315,6 +371,13 @@ SELECT ic.category_id AS c, COUNT(DISTINCT i.id) AS n
   GROUP BY ic.category_id
 ;', 'c', 'n');
 
+  // tous les fichiers (vidéos, PNG… compris) : un album sans JPEG n'est pas forcément vide dans la galerie (lien ↗)
+  $all_counts = query2array('
+SELECT category_id AS c, COUNT(*) AS n
+  FROM ' . IMAGE_CATEGORY_TABLE . '
+  GROUP BY category_id
+;', 'c', 'n');
+
   // SmartAlbum « inondé » : critères perdus ou ne désignant plus rien (ex. « pas dans l'album X » avec X
   // supprimé) -> il contient l'essentiel de la galerie
   $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGES_TABLE . ' i WHERE ' . $vis . ';'));
@@ -335,6 +398,7 @@ SELECT ic.category_id AS c, COUNT(DISTINCT i.id) AS n
       'name' => strip_tags(trigger_change('render_category_name', $r['name'], 'tag_manager')),
       'parent' => ($par !== null && !isset($forb[$par])) ? $par : null,
       'n' => $n,
+      'na' => isset($all_counts[$id]) ? (int)$all_counts[$id] : 0,
       'smart' => isset($smart[$id]),
     );
     if (isset($smart[$id]) && ($smart[$id] === 2 || ($all > 100 && $n >= 0.8 * $all)))
@@ -348,7 +412,7 @@ SELECT ic.category_id AS c, COUNT(DISTINCT i.id) AS n
   if (is_webmaster())
   {
     $row = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGES_TABLE . ' i WHERE ' . tagmanager_orphan_sql('i') . ' AND ' . $vis . ';'));
-    $out[] = array('id' => TAGMANAGER_ORPHANS, 'name' => 'Photos orphelines', 'parent' => null, 'n' => (int)$row[0], 'smart' => false, 'orphans' => true);
+    $out[] = array('id' => TAGMANAGER_ORPHANS, 'name' => tagmanager_t('Photos orphelines'), 'parent' => null, 'n' => (int)$row[0], 'smart' => false, 'orphans' => true);
   }
   return $out;
 }
@@ -411,7 +475,7 @@ SELECT i.id, i.storage_category_id AS s, i.date_creation AS d, ic.category_id AS
 function tagmanager_data_tags()
 {
   $rows = query2array('
-SELECT t.id, t.name, COUNT(i.id) AS n, p.path, p.status
+SELECT t.id, t.name, COUNT(i.id) AS n, COUNT(it.image_id) AS na, p.path, p.status
   FROM ' . TAGS_TABLE . ' t
     LEFT JOIN ' . IMAGE_TAG_TABLE . ' it ON it.tag_id = t.id
     LEFT JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id' . (tagmanager_visible_sql('i') === '' ? '' : ' AND ' . tagmanager_visible_sql('i')) . '
@@ -431,6 +495,7 @@ SELECT t.id, t.name, COUNT(i.id) AS n, p.path, p.status
       'id' => (int)$r['id'],
       'name' => $r['name'],
       'n' => (int)$r['n'],
+      'na' => (int)$r['na'], // toutes les photos, visibles ou non : 0 = tag sans photo
       'path' => $r['path'],
       'status' => $r['status'],
     );
@@ -698,25 +763,25 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
 
     if ($r['status'] === 'nofile')
     {
-      $row['why'] = 'Fichiers illisibles depuis le serveur';
+      $row['why'] = tagmanager_t('Fichiers illisibles depuis le serveur');
     }
     elseif ($best !== null && $best_pct >= 80)
     {
       $row['act'] = $best_valid ? 'merge' : 'rename';
       $row['target'] = $best;
       $row['conf'] = ($best_pct >= 88) ? 'haute' : 'moyenne';
-      $row['why'] = 'Nom très proche de « ' . $best . ' »' . ($best_valid ? '' : ' (présent dans le fichier, absent de Piwigo)');
+      $row['why'] = $best_valid ? tagmanager_t('Nom très proche de « %s »', $best) : tagmanager_t('Nom très proche de « %s » (présent dans le fichier, absent de Piwigo)', $best);
     }
     elseif ($n === 0)
     {
       $row['act'] = 'delete';
       $row['conf'] = 'moyenne';
-      $row['why'] = 'Aucune photo rattachée';
+      $row['why'] = tagmanager_t('Aucune photo rattachée');
     }
     else
     {
       $row['act'] = 'place';
-      $row['why'] = 'Aucun niveau parent trouvé dans les fichiers testés';
+      $row['why'] = tagmanager_t('Aucun niveau parent trouvé dans les fichiers testés');
     }
 
     $out[] = $row;
@@ -741,9 +806,9 @@ SELECT t.id, t.name, h.person_path, p.path,
     $homonyms[(int)$h['id']] = true;
     $where = ($h['path'] && !tagmanager_is_reserved_root($h['path'])) ? ' (' . str_replace('|', ' › ', implode('|', array_slice(explode('|', $h['path']), 0, -1))) . ')' : '';
     $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'split',
-      'chip' => 'personne et tag ordinaire',
-      'why' => '« ' . $h['name'] . ' » sert à deux choses : c\'est le nom d\'une personne (cadre de visage) et un tag ordinaire' . $where . '. Piwigo n\'a qu\'un seul tag pour les deux et ne peut pas les distinguer.',
-      'fix' => 'Solution : donner un autre nom au tag ordinaire. La personne garde le nom « ' . $h['name'] . ' ».',
+      'chip' => tagmanager_t('personne et tag ordinaire'),
+      'why' => tagmanager_t('« %s » sert à deux choses : c\'est le nom d\'une personne (cadre de visage) et un tag ordinaire%s. Piwigo n\'a qu\'un seul tag pour les deux et ne peut pas les distinguer.', $h['name'], $where),
+      'fix' => tagmanager_t('Solution : donner un autre nom au tag ordinaire. La personne garde le nom « %s ».', $h['name']),
       'act' => 'split', 'target' => $h['name'] . ' (tag)', 'conf' => 'faible');
   }
 
@@ -763,9 +828,9 @@ SELECT t.id, t.name,
     {
       $grp = implode('|', array_slice(explode('|', $over[(int)$f['id']]), 0, -1));
       $out[] = array('id' => (int)$f['id'], 'name' => $f['name'], 'n' => (int)$f['n'], 'status' => 'unface',
-        'chip' => 'marqué visage à tort', 'group' => str_replace('|', ' › ', $grp),
-        'why' => '« ' . $f['name'] . ' » est marqué comme visage, mais aucune photo lue n\'a de cadre de visage à ce nom : ses photos le rangent sous ' . str_replace('|', ' › ', $grp !== '' ? $grp : $over[(int)$f['id']]) . '. Il est donc caché comme une personne alors que c\'est un tag ordinaire.',
-        'fix' => 'Solution : le retirer de la liste des visages. Aucun fichier n\'est modifié.',
+        'chip' => tagmanager_t('marqué visage à tort'), 'group' => str_replace('|', ' › ', $grp),
+        'why' => tagmanager_t('« %s » est marqué comme visage, mais aucune photo lue n\'a de cadre de visage à ce nom : ses photos le rangent sous %s. Il est donc caché comme une personne alors que c\'est un tag ordinaire.', $f['name'], str_replace('|', ' › ', $grp !== '' ? $grp : $over[(int)$f['id']])),
+        'fix' => tagmanager_t('Solution : le retirer de la liste des visages. Aucun fichier n\'est modifié.'),
         'act' => 'unface', 'target' => '', 'conf' => 'faible');
     }
   }
@@ -790,12 +855,12 @@ function tagmanager_face_unflag($tag_id)
   $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', $t)) . '\';');
   if (pwg_db_num_rows($r) === 0)
   {
-    return array('ok' => false, 'error' => 'Aucune liste de visages (face_tag / face_tag_editor non installé) : rien à corriger.');
+    return array('ok' => false, 'error' => tagmanager_t('Aucune liste de visages (face_tag / face_tag_editor non installé) : rien à corriger.'));
   }
   $over = tagmanager_face_registry_overridden();
   if (!isset($over[$tag_id]))
   {
-    return array('ok' => false, 'error' => 'Ce tag n\'est pas marqué comme visage, ou ses photos ne le rangent pas hors de « Personnes ».');
+    return array('ok' => false, 'error' => tagmanager_t('Ce tag n\'est pas marqué comme visage, ou ses photos ne le rangent pas hors de « Personnes ».'));
   }
   $name = query2array('SELECT name FROM ' . TAGS_TABLE . ' WHERE id = ' . $tag_id . ';', null, 'name');
   $name = $name ? $name[0] : '';
@@ -806,7 +871,7 @@ function tagmanager_face_unflag($tag_id)
     $any = !empty($scan['both']) ? $scan['both'][0] : $scan['person'][0];
     tagmanager_record_homonym($tag_id, $scan['person_path'], $any, time());
     $n = count($scan['person']) + count($scan['both']);
-    return array('ok' => false, 'homonym' => true, 'error' => '« ' . $name . ' » est bien une personne sur ' . $n . ' photo(s) (' . str_replace('|', ' › ', $scan['person_path']) . ') : ce n\'est pas une erreur de la liste des visages, mais un même nom pour une personne et un tag ordinaire. La ligne propose maintenant « Séparer ».');
+    return array('ok' => false, 'homonym' => true, 'error' => tagmanager_t('« %s » est bien une personne sur %s photo(s) (%s) : ce n\'est pas une erreur de la liste des visages, mais un même nom pour une personne et un tag ordinaire. La ligne propose maintenant « Séparer ».', $name, $n, str_replace('|', ' › ', $scan['person_path'])));
   }
   pwg_query('DELETE FROM `' . $t . '` WHERE tag_id = ' . $tag_id . ' AND is_face_tag = 1;');
   return array('ok' => true, 'name' => $name, 'read' => $scan['read'], 'total' => $scan['total']);

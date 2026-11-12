@@ -1,6 +1,8 @@
 <?php
 defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/i18n.php');
+
 /**
  * Actions AJAX de l'interface, partagées entre l'administration (webmestres) et la page publique
  * (utilisateurs ayant un droit dans la table des droits).
@@ -43,7 +45,7 @@ function tagmanager_ajax($public)
   {
     if ($level < $min)
     {
-      $reply(array('ok' => false, 'error' => 'Droits insuffisants.'));
+      $reply(array('ok' => false, 'error' => tagmanager_t('Droits insuffisants.')));
     }
   };
   $admin_only = function () use ($webmaster, $fail)
@@ -98,6 +100,11 @@ function tagmanager_ajax($public)
     case 'tag_albums':
       $need(1);
       $reply(tagmanager_data_tag_albums($ids('ids')));
+
+    case 'smart_preview':
+    case 'smart_refresh':
+      $need(1);
+      $reply(tagmanager_smart_refresh(isset($_POST['album']) ? $_POST['album'] : 0, $_POST['action'] === 'smart_refresh'));
 
     case 'recon':
       $need(2);
@@ -159,6 +166,10 @@ function tagmanager_ajax($public)
       $par = isset($_POST['parent']) ? stripslashes($_POST['parent']) : '';
       $nm = isset($_POST['name']) ? stripslashes($_POST['name']) : '';
       $reply($_POST['action'] === 'group_create' ? tagmanager_group_create($par, $nm) : tagmanager_tag_create($par, $nm));
+
+    case 'tag_place_nophoto':
+      $need(2);
+      $reply(tagmanager_tag_place_nophoto(isset($_POST['tag']) ? stripslashes($_POST['tag']) : '', isset($_POST['parent']) ? stripslashes($_POST['parent']) : ''));
 
     case 'group_delete':
       $need(3);

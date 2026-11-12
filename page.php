@@ -19,6 +19,7 @@ include_once(TAGMANAGER_PATH . 'lib/data.php');
 include_once(TAGMANAGER_PATH . 'lib/queue.php');
 include_once(TAGMANAGER_PATH . 'lib/struct.php');
 include_once(TAGMANAGER_PATH . 'lib/ajax.php');
+include_once(TAGMANAGER_PATH . 'lib/i18n.php');
 
 // Visiteur non connecté : écran d'identification
 if (empty($user['id']) || is_a_guest())
@@ -33,7 +34,7 @@ $tm_level = tagmanager_user_level();
 if ($tm_level < 1)
 {
   http_response_code(403);
-  die('Accès refusé.');
+  die(tagmanager_t('Accès refusé.'));
 }
 
 if (isset($_POST['action']))
@@ -51,6 +52,7 @@ $template->assign(array(
   'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
   'TM_JS_V' => @filemtime(TAGMANAGER_PATH . 'js/app.js'),
   'TM_PUBLIC' => true,
+  'TM_I18N' => tagmanager_js_dict_json(),
   'TM_GALLERY' => get_absolute_root_url(),
   'TM_LEVEL' => $tm_level,
   'TM_HOME' => get_absolute_root_url() . 'index.php',

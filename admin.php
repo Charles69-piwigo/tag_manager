@@ -15,6 +15,7 @@ include_once(TAGMANAGER_PATH . 'lib/data.php');
 include_once(TAGMANAGER_PATH . 'lib/queue.php');
 include_once(TAGMANAGER_PATH . 'lib/struct.php');
 include_once(TAGMANAGER_PATH . 'lib/ajax.php');
+include_once(TAGMANAGER_PATH . 'lib/i18n.php');
 
 tagmanager_ensure_tables();
 
@@ -51,6 +52,7 @@ if ($page['tab'] === 'app')
     'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
     'TM_JS_V' => @filemtime(TAGMANAGER_PATH . 'js/app.js'),
     'TM_PUBLIC' => false,
+    'TM_I18N' => tagmanager_js_dict_json(),
     'TM_GALLERY' => get_absolute_root_url(),
   ));
   $template->set_filename('tag_manager_app', dirname(__FILE__) . '/template/app.tpl');

@@ -45,6 +45,31 @@ SELECT COUNT(*)
   return (int)$row[0];
 }
 
+/**
+ * Tags créés dans Piwigo et attachés à aucune photo, hors tags de visage : aucun fichier à lire,
+ * l'indexation ne peut pas leur trouver de chemin. Ceux qui en ont un (créés depuis « Gérer les tags »,
+ * ou vidés de leurs photos) restent à leur place ; les autres sont regroupés sous « (sans photo) ».
+ */
+function tagmanager_count_nophoto_tags()
+{
+  $n = 0;
+  $res = pwg_query('
+SELECT t.id, t.name, p.path
+  FROM ' . TAGS_TABLE . ' t
+    LEFT JOIN ' . TAGMANAGER_PATHS_TABLE . ' p ON p.tag_id = t.id AND p.kind = \'tag\' AND p.status = \'ok\'
+  WHERE NOT EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)
+    AND p.tag_id IS NULL
+;');
+  while ($r = pwg_db_fetch_assoc($res))
+  {
+    if (!tagmanager_is_reserved($r['id'], $r['name'], $r['path']))
+    {
+      $n++;
+    }
+  }
+  return $n;
+}
+
 function tagmanager_upsert_tag_path($tag_id, $path, $image_id, $status, $now)
 {
   pwg_query('
@@ -254,7 +279,7 @@ SELECT id, path
 /** Résumé de l'index pour la page d'administration. */
 function tagmanager_index_summary()
 {
-  $sum = array('total_tags' => tagmanager_count_used_tags(), 'ok' => 0, 'flat' => 0, 'nofile' => 0, 'last' => 0);
+  $sum = array('total_tags' => tagmanager_count_used_tags(), 'ok' => 0, 'flat' => 0, 'nofile' => 0, 'nophoto' => tagmanager_count_nophoto_tags(), 'last' => 0);
 
   $res = pwg_query('
 SELECT p.status, COUNT(*) AS n, MAX(p.indexed_at) AS last

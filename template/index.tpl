@@ -20,7 +20,7 @@
   <h2>Tag Manager</h2>
 </div>
 
-<div id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}">
+<div id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}">
 
   <div class="tm-box">
     <h3>{'Index des chemins de tags'|@translate}</h3>
@@ -31,6 +31,7 @@
       <div><b>{$TM_SUMMARY.ok}</b>{'avec chemin'|@translate}</div>
       <div><b>{$TM_SUMMARY.flat}</b>{'à plat'|@translate}</div>
       <div><b>{$TM_SUMMARY.nofile}</b>{'fichier introuvable'|@translate}</div>
+      <div><b>{$TM_SUMMARY.nophoto}</b>{'sans photo'|@translate}</div>
     </div>
 
     <p>
@@ -73,6 +74,7 @@
   var bar = document.getElementById('tm-bar');
   var wrap = document.getElementById('tm-barwrap');
   var msg = document.getElementById('tm-msg');
+  var T = function (k) { return root.getAttribute('data-t-' + k) || k; }; // textes traduits par le gabarit
 
   function post(data) {
     var fd = new FormData();
@@ -98,13 +100,13 @@
         done += r.processed;
         reads += r.reads;
         bar.style.width = (s.total ? Math.min(100, 100 * done / s.total) : 100) + '%';
-        msg.textContent = done + ' / ' + s.total + ' tags, ' + reads + ' fichiers lus';
+        msg.textContent = done + ' / ' + s.total + ' tags, ' + reads + ' ' + T('read');
         if (r.done) { break; }
       }
-      msg.textContent += ' — terminé';
+      msg.textContent += ' — ' + T('done');
       setTimeout(function () { location.reload(); }, 800);
     } catch (e) {
-      msg.textContent = 'Erreur : ' + e.message;
+      msg.textContent = T('error') + ' ' + e.message;
       btn.disabled = false;
     }
   });

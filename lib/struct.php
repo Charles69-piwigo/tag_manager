@@ -14,6 +14,8 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/i18n.php');
+
 include_once(dirname(__FILE__) . '/queue.php');
 
 define('TAGMANAGER_MAX_STRUCT_FILES', 30000);
@@ -28,19 +30,19 @@ function tagmanager_valid_name($n)
   $n = trim((string)$n);
   if ($n === '')
   {
-    return 'Le nom est vide.';
+    return tagmanager_t('Le nom est vide.');
   }
   if (strlen($n) > 255)
   {
-    return 'Le nom dépasse 255 caractères.';
+    return tagmanager_t('Le nom dépasse 255 caractères.');
   }
   if (preg_match('/[|>\/\\\\]/', $n))
   {
-    return 'Les caractères | > / \\ sont interdits dans un nom.';
+    return tagmanager_t('Les caractères | > / \\ sont interdits dans un nom.');
   }
   if ($n !== strip_tags($n))
   {
-    return 'Le nom ne peut pas contenir de balises.';
+    return tagmanager_t('Le nom ne peut pas contenir de balises.');
   }
   return null;
 }
@@ -53,10 +55,9 @@ function tagmanager_name_taken_msg($new, array $t)
 {
   if (!empty($t['reserved']))
   {
-    return 'Le nom « ' . $new . ' » est déjà celui d\'un tag de visage (« ' . $t['name'] . ' », une personne gérée par face_tag_editor / digiKam, '
-      . 'qui n\'apparaît pas dans cet arbre). Piwigo ne peut pas avoir deux tags de même nom : choisissez un autre nom, par exemple avec une précision entre parenthèses.';
+    return tagmanager_t('Le nom « %s » est déjà celui d\'un tag de visage (« %s », une personne gérée par face_tag_editor / digiKam, qui n\'apparaît pas dans cet arbre). Piwigo ne peut pas avoir deux tags de même nom : choisissez un autre nom, par exemple avec une précision entre parenthèses.', $new, $t['name']);
   }
-  return 'Un tag « ' . $t['name'] . ' » existe déjà : les noms de dernier niveau doivent rester uniques.';
+  return tagmanager_t('Un tag « %s » existe déjà : les noms de dernier niveau doivent rester uniques.', $t['name']);
 }
 
 /** Tous les tags : nom => id, name, path (chemin indexé ou null), status, ok (chemin exploitable), reserved. */
@@ -205,7 +206,7 @@ function tagmanager_struct_plan(array $ops)
   if (empty($ops))
   {
     $plan['ok'] = false;
-    $plan['errors'][] = 'Aucune opération.';
+    $plan['errors'][] = tagmanager_t('Aucune opération.');
     return $plan;
   }
 
@@ -276,7 +277,7 @@ function tagmanager_struct_plan(array $ops)
     $parts = array();
     foreach ($tags as $t)
     {
-      $parts[] = '« ' . $t['name'] . ' » (' . (isset($n[$t['id']]) ? $n[$t['id']] : 0) . ')';
+      $parts[] = tagmanager_t('« %s » (%s)', $t['name'], isset($n[$t['id']]) ? $n[$t['id']] : 0);
     }
     return implode(', ', $parts);
   };
@@ -321,13 +322,13 @@ function tagmanager_struct_plan(array $ops)
       case 'place':
         if (!isset($map[$tname]))
         {
-          $err('« ' . $tname . ' » : tag inconnu de Piwigo.');
+          $err(tagmanager_t('« %s » : tag inconnu de Piwigo.', $tname));
           break;
         }
         $t = $map[$tname];
         if ($t['reserved'])
         {
-          $err('« ' . $tname . ' » : tag de visage, géré par face_tag_editor et digiKam.');
+          $err(tagmanager_t('« %s » : tag de visage, géré par face_tag_editor et digiKam.', $tname));
           break;
         }
         $mutated[] = $tname;
@@ -337,14 +338,14 @@ function tagmanager_struct_plan(array $ops)
         if (!empty($kids) && ($type === 'merge' || $type === 'delete'))
         {
           // Seul ce tag est touché : ses descendants ne bougent pas. À l'utilisateur d'accepter en connaissance de cause.
-          $plan['warnings'][] = '« ' . $tname . ' » contient ' . count($kids) . ' tag(s) : ' . $describe($kids) . '. '
-            . 'Seul « ' . $tname . ' » sera ' . ($type === 'delete' ? 'supprimé' : 'fusionné') . ' ; ces tags ne sont pas modifiés et « ' . $tname
-            . ' » ne subsistera que comme groupe dans leur chemin.';
+          $plan['warnings'][] = $type === 'delete'
+            ? tagmanager_t('« %1$s » contient %2$s tag(s) : %3$s. Seul « %1$s » sera supprimé ; ces tags ne sont pas modifiés et « %1$s » ne subsistera que comme groupe dans leur chemin.', $tname, count($kids), $describe($kids))
+            : tagmanager_t('« %1$s » contient %2$s tag(s) : %3$s. Seul « %1$s » sera fusionné ; ces tags ne sont pas modifiés et « %1$s » ne subsistera que comme groupe dans leur chemin.', $tname, count($kids), $describe($kids));
           $kids = array();
         }
         foreach ($kids as $k)
         {
-          if ($k['reserved']) { $err('« ' . $tname . ' » contient un tag de visage (« ' . $k['name'] . ' ») : opération refusée.'); break 2; }
+          if ($k['reserved']) { $err(tagmanager_t('« %s » contient un tag de visage (« %s ») : opération refusée.', $tname, $k['name'])); break 2; }
           $mutated[] = $k['name'];
         }
         $kid_ids = array();
@@ -353,9 +354,9 @@ function tagmanager_struct_plan(array $ops)
         if ($type === 'rename')
         {
           $new = trim(isset($op['name']) ? (string)$op['name'] : '');
-          if (($e = tagmanager_valid_name($new)) !== null) { $err('« ' . $tname . ' » : ' . $e); break; }
-          if ($new === $tname) { $err('« ' . $tname . ' » : le nom est inchangé.'); break; }
-          if (($other = $name_taken($new, $t['id'])) !== null) { $err('« ' . $tname . ' » : ' . tagmanager_name_taken_msg($new, $other)); break; }
+          if (($e = tagmanager_valid_name($new)) !== null) { $err(tagmanager_t('« %s » : %s', $tname, $e)); break; }
+          if ($new === $tname) { $err(tagmanager_t('« %s » : le nom est inchangé.', $tname)); break; }
+          if (($other = $name_taken($new, $t['id'])) !== null) { $err(tagmanager_t('« %s » : %s', $tname, tagmanager_name_taken_msg($new, $other))); break; }
           $to = $t['ok'] ? array_merge(array_slice(explode('|', $t['path']), 0, -1), array($new)) : array($new);
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => $to));
           $plan['final'][] = array('a' => 'rename_tag', 'id' => $t['id'], 'name' => $new, 'path' => $t['ok'] ? implode('|', $to) : null);
@@ -364,44 +365,44 @@ function tagmanager_struct_plan(array $ops)
             $add_files($kid_ids, array('op' => 'replace_prefix', 'from' => explode('|', $t['path']), 'to' => $to));
             $plan['final'][] = array('a' => 'prefix', 'from' => $t['path'], 'to' => implode('|', $to));
           }
-          $plan['lines'][] = 'Renommer « ' . $tname . ' » en « ' . $new . ' »'
-            . (!empty($kids) ? ' (et ses ' . count($kids) . ' tag(s) dessous : ' . $describe($kids) . ')' : '');
+          $plan['lines'][] = tagmanager_t('Renommer « %s » en « %s »', $tname, $new)
+            . (!empty($kids) ? tagmanager_t(' (et ses %s tag(s) dessous : %s)', count($kids), $describe($kids)) : '');
         }
         elseif ($type === 'merge')
         {
           $dname = isset($op['to']) ? (string)$op['to'] : '';
-          if (!isset($map[$dname])) { $err('« ' . $dname . ' » : tag de destination inconnu.'); break; }
+          if (!isset($map[$dname])) { $err(tagmanager_t('« %s » : tag de destination inconnu.', $dname)); break; }
           $d = $map[$dname];
-          if ($d['id'] === $t['id']) { $err('Un tag ne peut pas être fusionné avec lui-même.'); break; }
-          if ($d['reserved']) { $err('« ' . $dname . ' » : tag de visage, géré par face_tag_editor et digiKam.'); break; }
-          if (!$d['ok']) { $err('« ' . $dname . ' » : pas de chemin connu, impossible de fusionner vers ce tag.'); break; }
+          if ($d['id'] === $t['id']) { $err(tagmanager_t('Un tag ne peut pas être fusionné avec lui-même.')); break; }
+          if ($d['reserved']) { $err(tagmanager_t('« %s » : tag de visage, géré par face_tag_editor et digiKam.', $dname)); break; }
+          if (!$d['ok']) { $err(tagmanager_t('« %s » : pas de chemin connu, impossible de fusionner vers ce tag.', $dname)); break; }
           $refs[] = $dname;
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => explode('|', $d['path']), 'ensure' => true));
           $plan['final'][] = array('a' => 'merge', 'dst' => $d['id'], 'src' => array($t['id']));
-          $plan['lines'][] = 'Fusionner « ' . $tname . ' » dans « ' . $dname . ' »';
+          $plan['lines'][] = tagmanager_t('Fusionner « %s » dans « %s »', $tname, $dname);
         }
         elseif ($type === 'delete')
         {
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => null));
           $plan['final'][] = array('a' => 'delete_tag', 'id' => $t['id']);
-          $plan['lines'][] = 'Supprimer « ' . $tname . ' »';
+          $plan['lines'][] = tagmanager_t('Supprimer « %s »', $tname);
         }
         else // place
         {
           $g = trim(isset($op['group']) ? (string)$op['group'] : '');
           $segs = ($g === '') ? array() : explode('|', $g);
-          if (empty($segs)) { $err('« ' . $tname . ' » : choisissez un groupe d\'accueil.'); break; }
-          foreach ($segs as $s) { if (($e = tagmanager_valid_name($s)) !== null) { $err('Groupe « ' . $g . ' » : ' . $e); break 2; } }
-          if (tagmanager_is_reserved_root($g)) { $err('Le groupe « ' . $g . ' » est réservé aux tags de visage.'); break; }
+          if (empty($segs)) { $err(tagmanager_t('« %s » : choisissez un groupe d\'accueil.', $tname)); break; }
+          foreach ($segs as $s) { if (($e = tagmanager_valid_name($s)) !== null) { $err(tagmanager_t('Groupe « %s » : %s', $g, $e)); break 2; } }
+          if (tagmanager_is_reserved_root($g)) { $err(tagmanager_t('Le groupe « %s » est réservé aux tags de visage.', $g)); break; }
           $to = array_merge($segs, array($tname));
           if ($t['ok'] && $t['path'] === implode('|', $to))
           {
             // Déjà classé dans Piwigo : on laisse relancer, pour inscrire le tag dans les fichiers qui ne le portent pas
-            $plan['warnings'][] = '« ' . $tname . ' » est déjà dans ce groupe dans Piwigo : l\'opération ne fera que compléter les fichiers qui ne le portent pas encore.';
+            $plan['warnings'][] = tagmanager_t('« %s » est déjà dans ce groupe dans Piwigo : l\'opération ne fera que compléter les fichiers qui ne le portent pas encore.', $tname);
           }
           if (!empty($kids) && $t['ok'] && tagmanager_path_starts(implode('|', $to), $t['path']))
           {
-            $err('« ' . $tname . ' » ne peut pas être rangé dans l\'un de ses propres tags.');
+            $err(tagmanager_t('« %s » ne peut pas être rangé dans l\'un de ses propres tags.', $tname));
             break;
           }
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => $to, 'ensure' => true));
@@ -411,23 +412,23 @@ function tagmanager_struct_plan(array $ops)
             $add_files($kid_ids, array('op' => 'replace_prefix', 'from' => explode('|', $t['path']), 'to' => $to));
             $plan['final'][] = array('a' => 'prefix', 'from' => $t['path'], 'to' => implode('|', $to));
           }
-          $plan['lines'][] = 'Ranger « ' . $tname . ' » dans « ' . str_replace('|', ' › ', $g) . ' »'
-            . (!empty($kids) ? ' (et ses ' . count($kids) . ' tag(s) dessous : ' . $describe($kids) . ')' : '');
+          $plan['lines'][] = tagmanager_t('Ranger « %s » dans « %s »', $tname, str_replace('|', ' › ', $g))
+            . (!empty($kids) ? tagmanager_t(' (et ses %s tag(s) dessous : %s)', count($kids), $describe($kids)) : '');
         }
         break;
 
       case 'split':
         // Un même tag Piwigo sert de personne et de tag ordinaire : le tag ordinaire prend un autre nom,
         // la personne garde le tag (même identifiant). Décision photo par photo, d'après les fichiers.
-        if (!isset($map[$tname])) { $err('« ' . $tname . ' » : tag inconnu de Piwigo.'); break; }
+        if (!isset($map[$tname])) { $err(tagmanager_t('« %s » : tag inconnu de Piwigo.', $tname)); break; }
         $t = $map[$tname];
-        if ($t['reserved']) { $err('« ' . $tname . ' » : tag de visage, géré par face_tag_editor et digiKam.'); break; }
+        if ($t['reserved']) { $err(tagmanager_t('« %s » : tag de visage, géré par face_tag_editor et digiKam.', $tname)); break; }
         $new = trim(isset($op['name']) ? (string)$op['name'] : '');
-        if (($e = tagmanager_valid_name($new)) !== null) { $err('Nouveau nom : ' . $e); break; }
-        if (tagmanager_norm_cmp($new) === tagmanager_norm_cmp($tname)) { $err('Choisissez un nom différent de « ' . $tname . ' ».'); break; }
+        if (($e = tagmanager_valid_name($new)) !== null) { $err(tagmanager_t('Nouveau nom : %s', $e)); break; }
+        if (tagmanager_norm_cmp($new) === tagmanager_norm_cmp($tname)) { $err(tagmanager_t('Choisissez un nom différent de « %s ».', $tname)); break; }
         if (($other = $name_taken($new, -1)) !== null) { $err(tagmanager_name_taken_msg($new, $other)); break; }
         $total = (int)pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($t['id']) . ';'))[0];
-        if ($total > TAGMANAGER_SPLIT_MAX) { $err('« ' . $tname . ' » est sur ' . $total . ' photos : séparation limitée à ' . TAGMANAGER_SPLIT_MAX . ' photos.'); break; }
+        if ($total > TAGMANAGER_SPLIT_MAX) { $err(tagmanager_t('« %s » est sur %s photos : séparation limitée à %s photos.', $tname, $total, TAGMANAGER_SPLIT_MAX)); break; }
         $mutated[] = $tname;
         $scan = tagmanager_usage_scan($t['id'], $tname);
         if (!empty($scan['unreadable']))
@@ -436,8 +437,8 @@ function tagmanager_struct_plan(array $ops)
           break;
         }
         $moved = array_merge($scan['normal'], $scan['both']);
-        if (empty($moved)) { $err('Aucune photo ne porte « ' . $tname . ' » comme tag ordinaire : rien à séparer.'); break; }
-        if (empty($scan['person']) && empty($scan['both'])) { $err('Aucune photo ne porte « ' . $tname . ' » comme personne : utilisez plutôt « Renommer ».'); break; }
+        if (empty($moved)) { $err(tagmanager_t('Aucune photo ne porte « %s » comme tag ordinaire : rien à séparer.', $tname)); break; }
+        if (empty($scan['person']) && empty($scan['both'])) { $err(tagmanager_t('Aucune photo ne porte « %s » comme personne : utilisez plutôt « Renommer ».', $tname)); break; }
         $npath = $scan['normal_path'] !== null ? $scan['normal_path'] : ($t['ok'] ? $t['path'] : $tname);
         $to = array_merge(array_slice(explode('|', $npath), 0, -1), array($new));
         foreach ($moved as $img)
@@ -451,50 +452,52 @@ function tagmanager_struct_plan(array $ops)
           'person' => count($scan['person']), 'normal' => count($scan['normal']), 'both' => count($scan['both']), 'none' => count($scan['none']),
           'person_path' => $scan['person_path'], 'normal_path' => $npath, 'new_path' => implode('|', $to),
         );
-        $plan['lines'][] = 'Séparer « ' . $tname . ' » : le tag ordinaire devient « ' . $new . ' »';
+        $plan['lines'][] = tagmanager_t('Séparer « %s » : le tag ordinaire devient « %s »', $tname, $new);
         break;
 
       case 'rename_group':
       case 'move_group':
         $P = trim(isset($op['group']) ? (string)$op['group'] : '');
-        if ($P === '' || !$group_exists($P)) { $err('Groupe « ' . str_replace('|', ' › ', $P) . ' » introuvable.'); break; }
-        if (tagmanager_is_reserved_root($P)) { $err('Le groupe « ' . $P . ' » est réservé aux tags de visage.'); break; }
+        if ($P === '' || !$group_exists($P)) { $err(tagmanager_t('Groupe « %s » introuvable.', str_replace('|', ' › ', $P))); break; }
+        if (tagmanager_is_reserved_root($P)) { $err(tagmanager_t('Le groupe « %s » est réservé aux tags de visage.', $P)); break; }
         $psegs = explode('|', $P);
         if ($type === 'rename_group')
         {
           $new = trim(isset($op['name']) ? (string)$op['name'] : '');
-          if (($e = tagmanager_valid_name($new)) !== null) { $err('Groupe « ' . end($psegs) . ' » : ' . $e); break; }
+          if (($e = tagmanager_valid_name($new)) !== null) { $err(tagmanager_t('Groupe « %s » : %s', end($psegs), $e)); break; }
           $qsegs = array_merge(array_slice($psegs, 0, -1), array($new));
         }
         else
         {
           $target = trim(isset($op['target']) ? (string)$op['target'] : '');
           $tsegs = ($target === '') ? array() : explode('|', $target);
-          foreach ($tsegs as $s) { if (($e = tagmanager_valid_name($s)) !== null) { $err('Destination « ' . $target . ' » : ' . $e); break 2; } }
+          foreach ($tsegs as $s) { if (($e = tagmanager_valid_name($s)) !== null) { $err(tagmanager_t('Destination « %s » : %s', $target, $e)); break 2; } }
           $qsegs = array_merge($tsegs, array(end($psegs)));
         }
         $Q = implode('|', $qsegs);
-        if ($Q === $P) { $err('Le groupe est déjà à cet endroit sous ce nom.'); break; }
-        if (tagmanager_path_starts($Q, $P)) { $err('Impossible de déplacer un groupe dans lui-même.'); break; }
-        if (tagmanager_is_reserved_root($Q)) { $err('La destination « ' . $Q . ' » est réservée aux tags de visage.'); break; }
-        if ($group_exists($Q)) { $err('« ' . str_replace('|', ' › ', $Q) . ' » existe déjà.'); break; }
+        if ($Q === $P) { $err(tagmanager_t('Le groupe est déjà à cet endroit sous ce nom.')); break; }
+        if (tagmanager_path_starts($Q, $P)) { $err(tagmanager_t('Impossible de déplacer un groupe dans lui-même.')); break; }
+        if (tagmanager_is_reserved_root($Q)) { $err(tagmanager_t('La destination « %s » est réservée aux tags de visage.', $Q)); break; }
+        if ($group_exists($Q)) { $err(tagmanager_t('« %s » existe déjà.', str_replace('|', ' › ', $Q))); break; }
 
         $leaves = $leaves_under($P);
         foreach ($leaves as $l)
         {
-          if ($l['reserved']) { $err('Le groupe contient un tag de visage (« ' . $l['name'] . ' ») : opération refusée.'); break 2; }
+          if ($l['reserved']) { $err(tagmanager_t('Le groupe contient un tag de visage (« %s ») : opération refusée.', $l['name'])); break 2; }
           $mutated[] = $l['name'];
         }
         $ids = array();
         foreach ($leaves as $l) { $ids[] = $l['id']; }
         $add_files($ids, array('op' => 'replace_prefix', 'from' => $psegs, 'to' => $qsegs));
         $plan['final'][] = array('a' => 'prefix', 'from' => $P, 'to' => $Q);
-        $plan['lines'][] = ($type === 'rename_group' ? 'Renommer' : 'Déplacer') . ' le groupe « ' . str_replace('|', ' › ', $P) . ' »' . ($type === 'rename_group' ? ' en « ' . end($qsegs) . ' »' : ' vers « ' . str_replace('|', ' › ', $Q) . ' »')
-          . ' (' . count($leaves) . ' tag(s) : ' . $describe($leaves) . ')';
+        $plan['lines'][] = ($type === 'rename_group'
+            ? tagmanager_t('Renommer le groupe « %s » en « %s »', str_replace('|', ' › ', $P), end($qsegs))
+            : tagmanager_t('Déplacer le groupe « %s » vers « %s »', str_replace('|', ' › ', $P), str_replace('|', ' › ', $Q)))
+          . tagmanager_t(' (%s tag(s) : %s)', count($leaves), $describe($leaves));
         break;
 
       default:
-        $err('Opération inconnue : « ' . $type . ' ».');
+        $err(tagmanager_t('Opération inconnue : « %s ».', $type));
     }
   }
 
@@ -513,24 +516,24 @@ function tagmanager_struct_plan(array $ops)
   }
   if ($writes_tag)
   {
-    $plan['warnings'][] = 'Les photos que Piwigo associe à ce tag mais dont le fichier n\'en porte aucun mot-clé le recevront dans leurs métadonnées (chemin complet). Sans cela, le classement n\'existerait que dans Piwigo et disparaîtrait à la prochaine indexation.';
+    $plan['warnings'][] = tagmanager_t('Les photos que Piwigo associe à ce tag mais dont le fichier n\'en porte aucun mot-clé le recevront dans leurs métadonnées (chemin complet). Sans cela, le classement n\'existerait que dans Piwigo et disparaîtrait à la prochaine indexation.');
   }
 
   $dups = array_diff_assoc($mutated, array_unique($mutated));
   if (!empty($dups))
   {
-    $err('Un même tag figure dans deux opérations : « ' . implode('», « ', array_unique($dups)) . ' ».');
+    $err(tagmanager_t('Un même tag figure dans deux opérations : %s.', implode(', ', array_map(function ($x) { return tagmanager_t('« %s »', $x); }, array_unique($dups)))));
   }
   $clash = array_intersect($refs, $mutated);
   if (!empty($clash))
   {
-    $err('Un tag de destination est aussi modifié dans le même lot : « ' . implode('», « ', array_unique($clash)) . ' ».');
+    $err(tagmanager_t('Un tag de destination est aussi modifié dans le même lot : %s.', implode(', ', array_map(function ($x) { return tagmanager_t('« %s »', $x); }, array_unique($clash)))));
   }
 
   $plan['tags'] = count(array_unique($mutated));
   if (count($plan['file_ops']) > TAGMANAGER_MAX_STRUCT_FILES)
   {
-    $err('Trop de photos pour un seul lot (' . count($plan['file_ops']) . ', maximum ' . TAGMANAGER_MAX_STRUCT_FILES . ').');
+    $err(tagmanager_t('Trop de photos pour un seul lot (%s, maximum %s).', count($plan['file_ops']), TAGMANAGER_MAX_STRUCT_FILES));
   }
   return $plan;
 }
@@ -558,14 +561,14 @@ function tagmanager_struct_create(array $ops, $original)
   $active = tagmanager_job_active();
   if ($active)
   {
-    return array('ok' => false, 'error' => 'Un lot est déjà en cours (n° ' . $active['id'] . '). Reprenez-le, réessayez ses erreurs ou annulez-le d\'abord.');
+    return array('ok' => false, 'error' => tagmanager_t('Un lot est déjà en cours (n° %s). Reprenez-le, réessayez ses erreurs ou annulez-le d\'abord.', $active['id']));
   }
   tagmanager_job_purge(100);
 
   $plan = tagmanager_struct_plan($ops);
   if (!$plan['ok'])
   {
-    return array('ok' => false, 'error' => 'Lot refusé.', 'details' => $plan['errors']);
+    return array('ok' => false, 'error' => tagmanager_t('Lot refusé.'), 'details' => $plan['errors']);
   }
 
   $summary = implode(' ; ', $plan['lines']);
@@ -627,7 +630,7 @@ function tagmanager_job_finalize($job_id)
         $dup = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . TAGS_TABLE . ' WHERE name = \'' . pwg_db_real_escape_string($f['name']) . '\' AND id <> ' . $id . ';'));
         if ((int)$dup[0] > 0)
         {
-          $msgs[] = 'Renommage ignoré : « ' . $f['name'] . ' » existe déjà.';
+          $msgs[] = tagmanager_t('Renommage ignoré : « %s » existe déjà.', $f['name']);
           $ok = false;
           break;
         }
@@ -679,14 +682,14 @@ function tagmanager_job_finalize($job_id)
         $exists = query2array('SELECT id, name FROM ' . TAGS_TABLE . ' WHERE name = \'' . pwg_db_real_escape_string($f['name']) . '\';');
         if (!empty($exists))
         {
-          $msgs[] = 'Séparation : « ' . $f['name'] . ' » existe déjà dans Piwigo, photos non déplacées.';
+          $msgs[] = tagmanager_t('Séparation : « %s » existe déjà dans Piwigo, photos non déplacées.', $f['name']);
           $ok = false;
           break;
         }
         $r = create_tag(pwg_db_real_escape_string($f['name']));
         if (isset($r['error']) || empty($r['id']))
         {
-          $msgs[] = 'Séparation : création du tag « ' . $f['name'] . ' » impossible.';
+          $msgs[] = tagmanager_t('Séparation : création du tag « %s » impossible.', $f['name']);
           $ok = false;
           break;
         }
@@ -727,19 +730,19 @@ function tagmanager_group_create($parent, $name)
   if (($e = tagmanager_valid_name($name)) !== null) { return array('ok' => false, 'error' => $e); }
   $parent = trim($parent);
   $path = ($parent === '') ? $name : $parent . '|' . $name;
-  if (tagmanager_is_reserved_root($path)) { return array('ok' => false, 'error' => 'Ce groupe est réservé aux tags de visage.'); }
+  if (tagmanager_is_reserved_root($path)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe est réservé aux tags de visage.')); }
 
   $map = tagmanager_tag_map();
   foreach ($map as $t)
   {
     if ($t['path'] !== null && tagmanager_path_starts($t['path'], $path))
     {
-      return array('ok' => false, 'error' => 'Ce groupe existe déjà.');
+      return array('ok' => false, 'error' => tagmanager_t('Ce groupe existe déjà.'));
     }
   }
   foreach (tagmanager_group_rows() as $g)
   {
-    if (tagmanager_path_starts($g, $path)) { return array('ok' => false, 'error' => 'Ce groupe existe déjà.'); }
+    if (tagmanager_path_starts($g, $path)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe existe déjà.')); }
   }
   pwg_query('INSERT INTO ' . TAGMANAGER_PATHS_TABLE . ' (kind, tag_id, path, status, indexed_at) VALUES (\'group\', NULL, \'' . pwg_db_real_escape_string($path) . '\', \'ok\', ' . time() . ');');
   return array('ok' => true, 'path' => $path);
@@ -753,8 +756,8 @@ function tagmanager_tag_create($parent, $name)
   $name = trim($name);
   if (($e = tagmanager_valid_name($name)) !== null) { return array('ok' => false, 'error' => $e); }
   $parent = trim($parent);
-  if ($parent === '') { return array('ok' => false, 'error' => 'Choisissez un groupe d\'accueil.'); }
-  if (tagmanager_is_reserved_root($parent)) { return array('ok' => false, 'error' => 'Ce groupe est réservé aux tags de visage.'); }
+  if ($parent === '') { return array('ok' => false, 'error' => tagmanager_t('Choisissez un groupe d\'accueil.')); }
+  if (tagmanager_is_reserved_root($parent)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe est réservé aux tags de visage.')); }
 
   $n = tagmanager_norm_cmp($name);
   foreach (tagmanager_tag_map() as $t)
@@ -768,7 +771,7 @@ function tagmanager_tag_create($parent, $name)
   $r = create_tag(pwg_db_real_escape_string($name));
   if (isset($r['error']) || empty($r['id']))
   {
-    return array('ok' => false, 'error' => 'Création impossible.');
+    return array('ok' => false, 'error' => tagmanager_t('Création impossible.'));
   }
   tagmanager_upsert_path($r['id'], $parent . '|' . $name);
   // le groupe est désormais porté par ce tag : on retire la ligne de groupe vide éventuelle
@@ -776,18 +779,48 @@ function tagmanager_tag_create($parent, $name)
   return array('ok' => true, 'id' => (int)$r['id'], 'path' => $parent . '|' . $name);
 }
 
+/**
+ * Range dans un groupe un tag de Piwigo attaché à aucune photo et sans chemin (regroupement
+ * « (sans photo) »), avant de l'affecter depuis l'écran Étiqueter : aucun fichier ne le porte,
+ * on n'inscrit que son chemin dans l'index (comme « Créer un tag »).
+ */
+function tagmanager_tag_place_nophoto($tag, $parent)
+{
+  $tag = trim($tag);
+  $parent = trim($parent, " |");
+  if ($parent === '') { return array('ok' => false, 'error' => tagmanager_t('Choisissez un groupe d\'accueil.')); }
+  if (strpos($parent, '>') !== false || strpos($parent, '/') !== false || strpos($parent, '\\') !== false || strpos($parent, '||') !== false)
+  {
+    return array('ok' => false, 'error' => tagmanager_t('Groupe d\'accueil invalide.'));
+  }
+  if (tagmanager_is_reserved_root($parent)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe est réservé aux tags de visage.')); }
+
+  $map = tagmanager_tag_map();
+  if (!isset($map[$tag])) { return array('ok' => false, 'error' => tagmanager_t('Tag inconnu : « %s ».', $tag)); }
+  $t = $map[$tag];
+  if ($t['reserved']) { return array('ok' => false, 'error' => tagmanager_t('Tag de visage : géré par face_tag_editor.')); }
+  if ($t['ok']) { return array('ok' => false, 'error' => tagmanager_t('Ce tag a déjà un chemin : %s.', str_replace('|', ' › ', $t['path']))); }
+  $n = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($t['id']) . ';'));
+  if ((int)$n[0] > 0) { return array('ok' => false, 'error' => tagmanager_t('Ce tag a des photos : rangez-le depuis « Gérer les tags ».')); }
+
+  $path = $parent . '|' . $t['name'];
+  tagmanager_upsert_path($t['id'], $path);
+  pwg_query('DELETE FROM ' . TAGMANAGER_PATHS_TABLE . ' WHERE kind = \'group\' AND path = \'' . pwg_db_real_escape_string($parent) . '\';');
+  return array('ok' => true, 'id' => (int)$t['id'], 'path' => $path);
+}
+
 /** Supprime un groupe qui ne contient aucun tag (les sous-groupes vides partent avec lui). */
 function tagmanager_group_delete($path)
 {
   $path = trim($path);
-  if ($path === '') { return array('ok' => false, 'error' => 'Groupe inconnu.'); }
-  if (tagmanager_is_reserved_root($path)) { return array('ok' => false, 'error' => 'Ce groupe est réservé aux tags de visage.'); }
+  if ($path === '') { return array('ok' => false, 'error' => tagmanager_t('Groupe inconnu.')); }
+  if (tagmanager_is_reserved_root($path)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe est réservé aux tags de visage.')); }
 
   foreach (tagmanager_tag_map() as $t)
   {
     if ($t['path'] !== null && strpos($t['path'], $path . '|') === 0)
     {
-      return array('ok' => false, 'error' => 'Ce groupe contient des tags : déplacez-les ou supprimez-les d\'abord.');
+      return array('ok' => false, 'error' => tagmanager_t('Ce groupe contient des tags : déplacez-les ou supprimez-les d\'abord.'));
     }
   }
   $like = pwg_db_real_escape_string(str_replace(array('\\', '%', '_'), array('\\\\', '\\%', '\\_'), $path));

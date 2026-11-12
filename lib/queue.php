@@ -9,6 +9,8 @@
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 
+include_once(dirname(__FILE__) . '/i18n.php');
+
 include_once(dirname(__FILE__) . '/file_resolver.php');
 include_once(dirname(__FILE__) . '/xmp_writer.php');
 include_once(dirname(__FILE__) . '/data.php');
@@ -117,7 +119,7 @@ function tagmanager_err_text($code)
     'ecriture' => 'écriture impossible (droits sur le fichier ?)',
     'renommage' => 'remplacement du fichier impossible (droits sur le dossier ?)',
   );
-  return isset($t[$code]) ? $t[$code] : $code;
+  return isset($t[$code]) ? tagmanager_t($t[$code]) : $code;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -136,17 +138,17 @@ function tagmanager_job_create(array $items, $original)
 
   if (empty($items))
   {
-    return array('ok' => false, 'error' => 'Aucune modification à écrire.');
+    return array('ok' => false, 'error' => tagmanager_t('Aucune modification à écrire.'));
   }
   if (count($items) > TAGMANAGER_MAX_ITEMS)
   {
-    return array('ok' => false, 'error' => 'Trop de photos pour un seul lot (maximum ' . TAGMANAGER_MAX_ITEMS . ').');
+    return array('ok' => false, 'error' => tagmanager_t('Trop de photos pour un seul lot (maximum %s).', TAGMANAGER_MAX_ITEMS));
   }
 
   $active = tagmanager_job_active();
   if ($active)
   {
-    return array('ok' => false, 'error' => 'Un lot est déjà en cours (n° ' . $active['id'] . ', ' . $active['done'] . ' / ' . $active['total'] . '). Reprenez-le ou annulez-le d’abord.');
+    return array('ok' => false, 'error' => tagmanager_t('Un lot est déjà en cours (n° %s, %s / %s). Reprenez-le ou annulez-le d’abord.', $active['id'], $active['done'], $active['total']));
   }
   tagmanager_job_purge(100);
 
@@ -167,7 +169,7 @@ function tagmanager_job_create(array $items, $original)
   }
   if (empty($names))
   {
-    return array('ok' => false, 'error' => 'Aucun tag à ajouter ni à retirer.');
+    return array('ok' => false, 'error' => tagmanager_t('Aucun tag à ajouter ni à retirer.'));
   }
 
   $quoted = array();
@@ -204,22 +206,22 @@ SELECT t.id, t.name, p.path, p.status
   {
     if (!isset($tag[$n]))
     {
-      $problems[] = '« ' . $n . ' » : tag inconnu de Piwigo';
+      $problems[] = tagmanager_t('« %s » : tag inconnu de Piwigo', $n);
       continue;
     }
     $r = $tag[$n];
     if (tagmanager_is_reserved($r['id'], $r['name'], $r['path']))
     {
-      $problems[] = '« ' . $n . ' » : tag de visage, géré par face_tag_editor et digiKam';
+      $problems[] = tagmanager_t('« %s » : tag de visage, géré par face_tag_editor et digiKam', $n);
     }
     elseif (isset($adds[$n]) && ($r['status'] !== 'ok' || empty($r['path'])))
     {
-      $problems[] = '« ' . $n . ' » : pas de chemin connu, à ranger d’abord (onglet À réconcilier)';
+      $problems[] = tagmanager_t('« %s » : pas de chemin connu, à ranger d’abord (onglet À réconcilier)', $n);
     }
   }
   if (!empty($problems))
   {
-    return array('ok' => false, 'error' => 'Lot refusé.', 'details' => $problems);
+    return array('ok' => false, 'error' => tagmanager_t('Lot refusé.'), 'details' => $problems);
   }
 
   // Photos
@@ -237,7 +239,7 @@ SELECT t.id, t.name, p.path, p.status
     $visible = query2array('SELECT i.id FROM ' . IMAGES_TABLE . ' i WHERE i.id IN (' . implode(',', array_keys($existing)) . ') AND ' . $vis . ';', 'id', 'id');
     if (count($visible) < count($existing))
     {
-      return array('ok' => false, 'error' => 'Lot refusé : il contient des fichiers qui ne sont pas des JPEG ou des photos auxquelles vous n’avez pas accès.');
+      return array('ok' => false, 'error' => tagmanager_t('Lot refusé : il contient des fichiers qui ne sont pas des JPEG ou des photos auxquelles vous n’avez pas accès.'));
     }
   }
 
@@ -277,10 +279,10 @@ SELECT t.id, t.name, p.path, p.status
   }
   if (empty($files))
   {
-    return array('ok' => false, 'error' => 'Aucune photo valide dans ce lot.');
+    return array('ok' => false, 'error' => tagmanager_t('Aucune photo valide dans ce lot.'));
   }
 
-  $summary = '+' . $n_add . ' / −' . $n_rem . ' tags sur ' . count($files) . ' photo' . (count($files) > 1 ? 's' : '');
+  $summary = count($files) > 1 ? tagmanager_t('+%s / −%s tags sur %s photos', $n_add, $n_rem, count($files)) : tagmanager_t('+%s / −%s tags sur 1 photo', $n_add, $n_rem);
   pwg_query('
 INSERT INTO ' . TAGMANAGER_JOBS_TABLE . ' (created_at, user_id, username, status, original, total, summary)
 VALUES (' . time() . ', ' . intval($user['id']) . ', \'' . pwg_db_real_escape_string($user['username']) . '\', \'pending\', '
@@ -374,7 +376,7 @@ function tagmanager_job_step($job_id, $limit)
   $job = pwg_db_fetch_assoc(pwg_query('SELECT * FROM ' . TAGMANAGER_JOBS_TABLE . ' WHERE id = ' . $job_id . ';'));
   if (!$job)
   {
-    return array('ok' => false, 'error' => 'Lot introuvable.');
+    return array('ok' => false, 'error' => tagmanager_t('Lot introuvable.'));
   }
   if ($job['status'] !== 'pending' && $job['status'] !== 'running')
   {
@@ -425,10 +427,10 @@ SELECT f.id, f.image_id, f.ops, i.path, i.file
     {
       tagmanager_sync_image_tags($f['image_id'], $spec['add'], $spec['rem'], $real);
       $status = 'done';
-      $msg = $res['changed'] ? 'modifié' : 'déjà à jour';
+      $msg = $res['changed'] ? tagmanager_t('modifié') : tagmanager_t('déjà à jour');
       if (!empty($res['warnings']))
       {
-        $msg .= ' (avertissement : ' . implode(', ', $res['warnings']) . ')';
+        $msg .= tagmanager_t(' (avertissement : %s)', implode(', ', $res['warnings']));
       }
       $any_ok = true;
     }
@@ -499,7 +501,7 @@ function tagmanager_job_retry($job_id)
 function tagmanager_job_cancel($job_id)
 {
   $job_id = intval($job_id);
-  pwg_query('UPDATE ' . TAGMANAGER_JOBFILES_TABLE . ' SET status = \'skipped\', message = \'annulé\' WHERE job_id = ' . $job_id . ' AND status = \'pending\';');
+  pwg_query('UPDATE ' . TAGMANAGER_JOBFILES_TABLE . ' SET status = \'skipped\', message = \'' . pwg_db_real_escape_string(tagmanager_t('annulé')) . '\' WHERE job_id = ' . $job_id . ' AND status = \'pending\';');
   $c = tagmanager_job_counts($job_id);
   pwg_query('
 UPDATE ' . TAGMANAGER_JOBS_TABLE . '

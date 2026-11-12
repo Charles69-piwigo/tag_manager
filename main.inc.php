@@ -11,6 +11,27 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.5 - 12/11/2026 - regroupe 1.4.1
+    ajouté : tags créés dans Piwigo et attachés à aucune photo, jusqu'ici invisibles : regroupement « (sans photo) » dans « Gérer les tags », « Étiqueter › Tags » et « Tags de la sélection » ; au premier ajout à des photos, une fenêtre demande leur groupe d'accueil ; compteur « sans photo » dans l'onglet Index
+    ajouté : champ de filtre au-dessus des arbres « Étiqueter › Albums » et « Étiqueter › Tags » (sans casse ni accents, un filtre par onglet)
+    ajouté : clic sur l'icône ⟳ d'un SmartAlbum : aperçu de ce que SmartAlbums changerait (photos entrées / sorties, photos rangées à la main inchangées) puis mise à jour de cet album sur confirmation ; sur ⚠, explication et lien vers ses critères
+    ajouté : traduction anglaise complète (écrans, messages du serveur, interface JavaScript) ; le français reste la langue de référence
+    corrigé : listes de groupes de « Créer un tag » / « Créer un groupe » bloquées sur le groupe choisi dans l'arbre ; « (racine) » proposé pour un groupe de premier niveau
+    corrigé : titre « Sauvegardes » au lieu de « Tag Manager » sur l'onglet Manager ; texte périmé dans Paramètres › Droits
+    corrigé : icône ↗ retirée des tags sans photo (erreur dans la galerie) et des albums vides
+
+version 1.4.1 - 12/11/2026
+    ajouté : les tags créés dans Piwigo et attachés à aucune photo (jusqu'ici invisibles : l'indexation ne lit que les tags qui ont des photos) apparaissent dans un regroupement « (sans photo) », en fin d'arbre, dans « Gérer les tags », « Étiqueter › Tags » et « Tags de la sélection ». Dans « Gérer les tags » : renommer, ranger dans un groupe, fusionner ou supprimer (aucun fichier touché). Un tag sans photo qui a déjà un chemin (créé depuis « Gérer les tags ») reste à sa place
+    ajouté : au premier ajout d'un tag « (sans photo) » à des photos (case cochée ou glisser-déposer), une fenêtre demande son groupe d'accueil ; le rangement est immédiat (index seulement, action tag_place_nophoto, niveau « Gérer : créer »), puis l'ajout entre dans la file avec le chemin complet
+    ajouté : onglet Index, compteur « sans photo »
+    ajouté : champ de filtre au-dessus de l'arbre « Étiqueter › Albums » et « Étiqueter › Tags » (un filtre gardé par onglet), sans casse ni accents ; les parents d'un élément trouvé sont ouverts, la branche d'un élément trouvé reste consultable
+    corrigé : « Gérer les tags », panneaux « Créer un tag » / « Créer un groupe » : la liste des groupes ne proposait que le groupe choisi dans l'arbre (champ pré-rempli, que la liste du navigateur prenait pour un filtre). Le champ reste vide, le groupe de l'arbre est affiché en indication et pris si on ne saisit rien ; « (racine) » proposé pour créer un groupe au premier niveau
+    ajouté : « Étiqueter › Albums » : un clic sur l'icône ⟳ d'un SmartAlbum (ou sur la mention ⟳ de la barre d'outils) propose de le mettre à jour : aperçu calculé par SmartAlbums sans rien écrire (nombre de photos avant → après, + entrées / − sorties, photos rangées à la main inchangées), puis smart_make_associations() sur confirmation (le même calcul que « Régénérer » de SmartAlbums, cet album seulement). Sur ⚠ : explication et lien vers les critères dans SmartAlbums (webmestres) ; un SmartAlbum sans critère n'est pas mis à jour. Actions smart_preview / smart_refresh (niveau « Étiqueter », albums visibles par l'utilisateur). Corrigé après le premier essai : message d'erreur furtif et photos affichées « orphelines » après la mise à jour (liste des albums mal rechargée : la mise à jour était faite, l'affichage non) ; photos rangées à la main jamais comptées (colonne smart = ENUM texte)
+    ajouté : traduction anglaise complète (jusqu'ici une quinzaine de libellés de l'onglet Index) : gabarits, messages du serveur (erreurs, aperçus, réconciliation, journal) et toute l'interface JavaScript (dictionnaire language/en_UK/js.lang.php, envoyé à la page seulement si la langue de l'utilisateur n'est pas le français). Le français reste la langue pivot : language/fr_FR reprend automatiquement toutes les clés. Outils : dev/i18n_wrap.js (--check), dev/i18n_php_keys.js
+    corrigé : Paramètres › Droits disait encore « pour l'instant seuls les webmestres accèdent à cette page » : les droits sont vérifiés à chaque action et les non-webmestres autorisés passent par le bouton « Tag manager » de la galerie
+    corrigé : titre de la page d'administration « Sauvegardes » au lieu de « Tag Manager » sur l'onglet Manager (Piwigo prend le premier h2 de la page, ici celui des Paramètres)
+    corrigé : icône ↗ (ouvrir dans la galerie) retirée des tags sans photo (la galerie affichait une erreur) et des albums vides (page vide) ; elle reste sur un album sans JPEG qui contient d'autres fichiers (vidéos…)
+
 version 1.4 - 11/11/2026 - regroupe 1.3.1
     modifié : « Étiqueter › Albums » montre les albums de la galerie (synchronisés et créés dans Piwigo) dans l'ordre de « Gestion des albums », au lieu des répertoires physiques et du faux album « upload / année / mois » ; une photo apparaît dans chaque album où elle est rangée, qu'elle vienne de galleries ou d'un envoi (upload)
     ajouté : « Photos orphelines » en fin d'arbre (webmestres seulement) ; albums sans photo JPEG grisés ; icône ⟳ et mention dans la barre d'outils pour les albums SmartAlbums (contenu calculé d'après les tags)
