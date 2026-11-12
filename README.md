@@ -57,9 +57,6 @@ Les niveaux sont cumulatifs (un utilisateur cumule ses droits et ceux de ses gro
 
 Le bouton est ajouté par le mécanisme standard de Piwigo pour les pages d'index (testé avec le thème `bootstrap_darkroom`).
 
-### Développement
-
-Le dossier `dev/` contient des outils hors plugin (banc d'essai du moteur sur des copies, comparaison de JPEG, génération de la feuille de style). Voir `dev/README.md`. `css/app.css` est **généré** à partir de la maquette par `dev/mkcss.js`.
 
 ---
 
@@ -116,6 +113,4 @@ Levels are cumulative (a user combines their own rights and those of their group
 
 The button uses Piwigo's standard mechanism for index pages (tested with the `bootstrap_darkroom` theme).
 
-### Development
 
-The `dev/` folder holds tools that are not part of the plugin (engine test bench working on copies, JPEG comparison, stylesheet generation). See `dev/README.md`. `css/app.css` is **generated** from the mockup by `dev/mkcss.js`.
