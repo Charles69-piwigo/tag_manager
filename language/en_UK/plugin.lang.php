@@ -2,7 +2,6 @@
 // Clé = texte français (langue pivot, voir language/fr_FR/plugin.lang.php). Les textes de l'interface
 // JavaScript sont dans js.lang.php. Clés manquantes : node dev/i18n_php_keys.js
 
-$lang['Gestionnaire'] = 'Manager';
 $lang['Index'] = 'Index';
 $lang['Index des chemins de tags'] = 'Tag path index';
 $lang['Piwigo ne conserve que le dernier niveau des tags. L’index lit une photo par tag pour retrouver son chemin complet dans les fichiers (lecture seule : aucun fichier ni aucun tag n’est modifié).'] = 'Piwigo only keeps the last level of a tag. The index reads one photo per tag to find its full path in the files (read-only: no file and no tag is modified).';
@@ -202,5 +201,10 @@ $lang['Ces droits sont vérifiés par le serveur à chaque action. Les membres a
 $lang['Le plugin SmartAlbums n\'est pas actif.'] = 'The SmartAlbums plugin is not active.';
 $lang['Cet album n\'est pas un SmartAlbum.'] = 'This album is not a SmartAlbum.';
 $lang['Ce SmartAlbum n\'a aucun critère : sa mise à jour y rangerait presque toute la galerie. Corrigez d\'abord ses critères dans SmartAlbums.'] = 'This SmartAlbum has no criteria: updating it would put almost the whole gallery in it. Fix its criteria in SmartAlbums first.';
+$lang['toutes'] = 'all';
+$lang['une partie'] = 'some';
+$lang['aucune'] = 'none';
+$lang['Taille de l’image chargée'] = 'Size of the loaded image';
+$lang['Indexation'] = 'Indexing';
 
 ?>

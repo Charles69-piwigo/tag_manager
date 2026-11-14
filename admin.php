@@ -21,19 +21,30 @@ tagmanager_ensure_tables();
 
 load_language('plugin.lang', TAGMANAGER_PATH);
 
-// ---------- onglets ----------
-$page['tab'] = isset($_GET['tab']) ? $_GET['tab'] : 'app';
-if (!in_array($page['tab'], array('app', 'index')))
+// ---------- onglets (ceux de Piwigo) ----------
+// tag / mng / set : trois écrans de la même page (js/app.js bascule de l'un à l'autre sans recharger,
+// pour ne pas perdre les changements en attente) ; index : page à part. « app » = ancienne adresse.
+$page['tab'] = isset($_GET['tab']) ? $_GET['tab'] : 'tag';
+if ($page['tab'] === 'app')
 {
-  $page['tab'] = 'app';
+  $page['tab'] = 'tag';
+}
+if (!in_array($page['tab'], array('tag', 'mng', 'index', 'set')))
+{
+  $page['tab'] = 'tag';
 }
 
 $tabsheet = new tabsheet();
 $tabsheet->set_id('tag_manager');
-$tabsheet->add('app', l10n('Gestionnaire'), TAGMANAGER_ADMIN . '&amp;tab=app');
-$tabsheet->add('index', l10n('Index'), TAGMANAGER_ADMIN . '&amp;tab=index');
+$tabsheet->add('tag', '<span class="icon-tags"></span>' . l10n('Étiqueter'), TAGMANAGER_ADMIN . '&amp;tab=tag');
+$tabsheet->add('mng', '<span class="icon-flow-tree"></span>' . l10n('Gérer les tags'), TAGMANAGER_ADMIN . '&amp;tab=mng');
+$tabsheet->add('index', '<span class="icon-database"></span>' . l10n('Index'), TAGMANAGER_ADMIN . '&amp;tab=index');
+$tabsheet->add('set', '<span class="icon-cog"></span>' . l10n('Paramètres'), TAGMANAGER_ADMIN . '&amp;tab=set');
 $tabsheet->select($page['tab']);
 $tabsheet->assign();
+
+// thème de l'administration : « roma » est sombre, la feuille du plugin suit
+$tm_dark = userprefs_get_param('admin_theme', 'clear') === 'roma';
 
 // ---------- actions AJAX (partagées avec la page publique : lib/ajax.php) ----------
 if (isset($_POST['action']))
@@ -43,10 +54,13 @@ if (isset($_POST['action']))
 }
 
 // ---------- affichage ----------
-if ($page['tab'] === 'app')
+if ($page['tab'] !== 'index')
 {
   $template->assign(array(
-    'TM_URL' => TAGMANAGER_ADMIN . '&tab=app',
+    'TM_URL' => TAGMANAGER_ADMIN . '&tab=tag',
+    'TM_SCREEN' => $page['tab'],
+    'TM_DARK' => $tm_dark,
+    'TM_INDEX_URL' => TAGMANAGER_ADMIN . '&tab=index',
     'TM_TOKEN' => get_pwg_token(),
     'TM_ASSETS' => get_root_url() . TAGMANAGER_PATH,
     'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
@@ -63,6 +77,9 @@ else
   $summary = tagmanager_index_summary();
   $template->assign(array(
     'TM_URL' => TAGMANAGER_ADMIN . '&tab=index',
+    'TM_DARK' => $tm_dark,
+    'TM_ASSETS' => get_root_url() . TAGMANAGER_PATH,
+    'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
     'TM_TOKEN' => get_pwg_token(),
     'TM_SUMMARY' => $summary,
     'TM_LAST' => $summary['last'] ? date('d/m/Y H:i', $summary['last']) : '',

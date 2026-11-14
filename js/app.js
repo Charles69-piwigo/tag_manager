@@ -215,8 +215,16 @@
   /** Petit lien ↗ (visible au survol de la ligne) vers la page de la galerie, dans un nouvel onglet. */
   function galLink(path, what) {
     if (!path || !GALLERY) { return ''; }
-    return '<a class="gal" draggable="false" href="' + esc(GALLERY + path) + tx('" target="_blank" rel="noopener" title="Ouvrir ') + what + tx(' dans la galerie (nouvel onglet)" aria-label="Ouvrir ') + what + tx(' dans la galerie">↗</a>');
+    return '<a class="gal" draggable="false" href="' + esc(GALLERY + path) + tx('" target="_blank" rel="noopener" title="Ouvrir ') + what + tx(' dans la galerie (nouvel onglet)" aria-label="Ouvrir ') + what + tx(' dans la galerie">') + '<i class="icon-link"></i></a>';
   }
+  // icônes de l'administration de Piwigo (police fontello) : flèche des arbres, pastilles de couleur
+  const caretHtml = (attr, has, open) => '<span class="caret' + (has && !open ? ' shut' : '') + '" ' + attr + '>' + (has ? '<i class="icon-down-open"></i>' : '') + '</span>';
+  const IC_ALB = '<span class="ic xs purple"><i class="icon-folder-open"></i></span>';
+  const IC_ORPH = '<span class="ic xs grey"><i class="icon-attention"></i></span>';
+  const IC_GROUP = '<span class="ic xs blue"><i class="icon-flow-tree"></i></span>';
+  const IC_TAG = '<span class="ic xs green" title="' + esc(tx('Tag Piwigo')) + '"><i class="icon-tags"></i></span>';
+  const IC_NOPATH = '<span class="ic xs grey"><i class="icon-attention"></i></span>';
+  const SEP = '<i class="icon-left-open sep" style="display:inline-block;transform:rotate(180deg)"></i>';
 
   function renderTree() {
     const el = $('#tree');
@@ -239,11 +247,11 @@
         if (f && self) { found = true; }
         const has = a.ch.length, open = f && deep ? true : !collapsed.has(String(a.id));
         const empty = !albTot[a.id];
-        const smart = a.broken ? '<span data-smart="' + a.id + '" role="button" tabindex="0" title="' + esc(BROKEN_TIP[a.broken] + ' ' + SMART_CLICK) + '" style="flex:none;margin-left:4px;color:#c0392b;cursor:pointer">⚠</span>' : a.smart ? '<span data-smart="' + a.id + '" role="button" tabindex="0" title="' + esc(SMART_TIP + ' ' + SMART_CLICK) + '" style="flex:none;margin-left:4px;color:var(--muted);cursor:pointer">⟳</span>' : '';
-        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + '" tabindex="0" data-alb="' + a.id + '"' + (empty ? ' style="opacity:.5"' : '') + '><span class="caret" data-car="' + a.id + '">' + (has ? (open ? '▼' : '▶') : '') + '</span><span class="nm" title="' + esc(a.name) + (empty ? tx(' (aucune photo JPEG)') : '') + '"' + (a.orphans ? ' style="font-style:italic"' : '') + '>' + esc(a.name) + '</span>' + smart + '<span class="cnt">' + albTot[a.id] + '</span>' + galLink(a.id > 0 && albAll[a.id] ? 'index.php?/category/' + a.id : '', tx('l’album')) + '</div>' + (has && open ? rec(a.ch, inHit || (f && self)) : '') + '</li>';
+        const smart = a.broken ? '<span class="broken" data-smart="' + a.id + '" role="button" tabindex="0" title="' + esc(BROKEN_TIP[a.broken] + ' ' + SMART_CLICK) + '"><i class="icon-attention"></i></span>' : a.smart ? '<span class="smart" data-smart="' + a.id + '" role="button" tabindex="0" title="' + esc(SMART_TIP + ' ' + SMART_CLICK) + '"><i class="icon-arrows-cw"></i></span>' : '';
+        return '<li><div class="node' + (view.id === a.id ? ' sel' : '') + (empty ? ' dim' : '') + '" tabindex="0" data-alb="' + a.id + '">' + caretHtml('data-car="' + a.id + '"', has, open) + (a.orphans ? IC_ORPH : IC_ALB) + '<span class="nm" title="' + esc(a.name) + (empty ? tx(' (aucune photo JPEG)') : '') + '"' + (a.orphans ? ' style="font-style:italic"' : '') + '>' + esc(a.name) + '</span>' + smart + galLink(a.id > 0 && albAll[a.id] ? 'index.php?/category/' + a.id : '', tx('l’album')) + '<span class="cnt">' + albTot[a.id] + '</span></div>' + (has && open ? rec(a.ch, inHit || (f && self)) : '') + '</li>';
       }).join('') + '</ul>';
       const tree = rec(ALB, false);
-      h = (f && !found ? tx('<div class="empty">Aucun album ne correspond.</div>') : tree) + tx('<div class="hint">Albums de la galerie, dans l’ordre de « Gestion des albums » : une photo apparaît dans chaque album où elle est rangée, qu’elle vienne de la synchronisation ou d’un envoi (upload). Grisé : aucune photo JPEG. ⟳ : album SmartAlbums (son contenu suit les tags) ; ⚠ : SmartAlbum sans critère valable. « Photos orphelines » : photos rangées dans aucun album. ↗ (au survol) : ouvrir l’album dans la galerie.</div>');
+      h = (f && !found ? tx('<div class="empty">Aucun album ne correspond.</div>') : tree) + tx('<div class="hint">Albums de la galerie, dans l’ordre de « Gestion des albums » : une photo apparaît dans chaque album où elle est rangée, qu’elle vienne de la synchronisation ou d’un envoi (upload). Grisé : aucune photo JPEG. <i class="icon-arrows-cw"></i> : album SmartAlbums, cliquez pour le mettre à jour ; <i class="icon-attention"></i> : SmartAlbum sans critère valable. « Photos orphelines » : photos rangées dans aucun album. <i class="icon-link"></i> (au survol) : ouvrir l’album dans la galerie.</div>');
     } else {
       const hit = c => !f || fold(c.name).indexOf(f) >= 0;
       const below = c => Object.keys(c.ch).some(k => hit(c.ch[k]) || below(c.ch[k]));
@@ -252,32 +260,32 @@
         if (f && !inHit && !self && !deep) { return ''; }
         if (f && self) { found = true; }
         const k2 = Object.keys(c.ch).length, open = f && deep ? true : !collapsed.has(c.key), leaf = isLeafNode(c);
-        return '<li><div class="node' + (leaf ? '' : ' group') + (view.key === c.key ? ' sel' : '') + '" tabindex="0" data-tag="' + esc(c.key) + '"' + (leaf ? ' data-leaf="' + esc(c.name) + '"' : '') + '><span class="caret" data-car="' + esc(c.key) + '">' + (k2 ? (open ? '▼' : '▶') : '') + '</span>' + (leaf ? tx('<span class="leafmark" title="Tag Piwigo"></span>') : '') + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span><span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span>' + galLink(leaf && TAGID[c.name] && TAGN[c.name] ? 'index.php?/tags/' + TAGID[c.name] : '', tx('le tag')) + '</div>' + (k2 && open ? rec(c, inHit || (f && self)) : '') + '</li>';
+        return '<li><div class="node' + (leaf ? '' : ' group') + (view.key === c.key ? ' sel' : '') + '" tabindex="0" data-tag="' + esc(c.key) + '"' + (leaf ? ' data-leaf="' + esc(c.name) + '"' : '') + '>' + caretHtml('data-car="' + esc(c.key) + '"', k2, open) + (leaf ? IC_TAG : c.name.charAt(0) === '(' ? IC_NOPATH : IC_GROUP) + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span>' + galLink(leaf && TAGID[c.name] && TAGN[c.name] ? 'index.php?/tags/' + TAGID[c.name] : '', tx('le tag')) + '<span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span></div>' + (k2 && open ? rec(c, inHit || (f && self)) : '') + '</li>';
       }).join('') + '</ul>';
       const tree = rec(tagTree(), false);
-      h = (f && !found ? tx('<div class="empty">Aucun tag ne correspond.</div>') : tree) + tx('<div class="hint"><span class="leafmark" style="display:inline-block"></span> = tag connu de Piwigo (dernier niveau). Les niveaux grisés n’existent que dans les fichiers. Cliquez pour filtrer les photos, glissez des photos sur un tag pour l’affecter ; ↗ (au survol) ouvre le tag dans la galerie. « (sans chemin) » regroupe les tags dont le chemin n’a pas été retrouvé ; « (sans photo) », les tags attachés à aucune photo (leur groupe est demandé au premier ajout).</div>');
+      h = (f && !found ? tx('<div class="empty">Aucun tag ne correspond.</div>') : tree) + tx('<div class="hint"><i class="icon-tags"></i> = tag connu de Piwigo (dernier niveau) ; <i class="icon-flow-tree"></i> = groupe, qui n’existe que dans les fichiers. Cliquez pour filtrer les photos, glissez des photos sur un tag pour l’affecter ; <i class="icon-link"></i> (au survol) ouvre le tag dans la galerie. « (sans chemin) » regroupe les tags dont le chemin n’a pas été retrouvé ; « (sans photo) », les tags attachés à aucune photo (leur groupe est demandé au premier ajout).</div>');
     }
     el.innerHTML = h;
   }
 
   function renderToolbar() {
-    let title = '', lastName = '', isLeaf = false, canDesc = false, smartNote = false, brokenNote = false;
+    let title = [], lastName = '', isLeaf = false, canDesc = false, smartNote = false, brokenNote = false;
     if (view.tab === 'albums') {
-      title = view.id ? albPath(view.id).join(' › ') : '';
+      title = view.id ? albPath(view.id) : [];
       smartNote = !!(view.id && albSub(view.id).some(id => albMap[id] && albMap[id].a.smart));
       brokenNote = !!(view.id && albSub(view.id).some(id => albMap[id] && albMap[id].a.broken));
       canDesc = !!(view.id && albMap[view.id] && albMap[view.id].a.ch.length);
     } else {
-      title = (view.key || '').split('|').join(' › ');
+      title = (view.key || '').split('|').filter(Boolean);
       lastName = (view.key || '').split('|').pop();
       isLeaf = !!(tagPath[lastName] && tagPath[lastName].join('|') === view.key);
       canDesc = !isLeaf;
     }
     const shown = CUR.list.length;
-    let h = '<div class="crumb">' + esc(title) + '<small>' + (CUR.loading && !shown ? tx('chargement…') : CUR.total + tx(' photos') + (CUR.total > PAGE ? ' · page ' + ((CUR.page || 0) + 1) + ' / ' + pageCount() : '') + ' · ' + sel.size + (sel.size > 1 ? tx(' sélectionnées') : tx(' sélectionnée'))) + (brokenNote ? ' · <span data-smart="' + view.id + '" role="button" tabindex="0" style="color:#c0392b;cursor:pointer" title="' + esc(BROKEN_TIP.norule + ' ' + SMART_CLICK) + tx('">⚠ SmartAlbum sans critère valable : contient presque toute la galerie</span>') : smartNote ? ' · <span data-smart="' + view.id + '" role="button" tabindex="0" style="cursor:pointer" title="' + esc(SMART_TIP + ' ' + SMART_CLICK) + tx('">⟳ SmartAlbums : le contenu suit les tags</span>') : '') + '</small></div>';
+    let h = '<div class="crumb">' + title.map(s => '<span class="bc" title="' + esc(s) + '">' + esc(s) + '</span>').join(SEP) + '<small>' + (CUR.loading && !shown ? tx('chargement…') : CUR.total + tx(' photos') + (CUR.total > PAGE ? ' · page ' + ((CUR.page || 0) + 1) + ' / ' + pageCount() : '') + ' · ' + sel.size + (sel.size > 1 ? tx(' sélectionnées') : tx(' sélectionnée'))) + (brokenNote ? ' · <span class="broken" data-smart="' + view.id + '" role="button" tabindex="0" title="' + esc(BROKEN_TIP.norule + ' ' + SMART_CLICK) + tx('"><i class="icon-attention"></i> SmartAlbum sans critère valable : contient presque toute la galerie</span>') : smartNote ? ' · <span data-smart="' + view.id + '" role="button" tabindex="0" title="' + esc(SMART_TIP + ' ' + SMART_CLICK) + tx('"><i class="icon-arrows-cw"></i> SmartAlbum : cliquez pour le mettre à jour</span>') : '') + '</small></div>';
     if (canDesc) { h += '<label class="chk"><input type="checkbox" id="desc"' + (view.desc ? ' checked' : '') + tx('> Inclure les sous-niveaux</label>'); }
     h += '<button class="btn" id="selall">' + (CUR.total > PAGE ? tx('Sélectionner la page') : tx('Tout sélectionner')) + '</button><button class="btn" id="selnone"' + (sel.size ? '' : ' disabled') + tx('>Désélectionner</button>');
-    if (isLeaf) { h += '<button class="btn danger" id="rmtag"' + (sel.size ? '' : ' disabled') + tx('>Retirer « ') + esc(lastName) + tx(' » de la sélection</button>'); }
+    if (isLeaf) { h += '<button class="btn danger" id="rmtag"' + (sel.size ? '' : ' disabled') + tx('><i class="icon-cancel"></i> Retirer « ') + esc(lastName) + tx(' » de la sélection</button>'); }
     $('#toolbar').innerHTML = h;
   }
 
@@ -297,7 +305,7 @@
       let band = '';
       if (byAlb && (k === 0 || p.alb !== lastAlb)) {
         const path = p.alb && albMap[p.alb] ? albPath(p.alb).join(' › ') : tx('Photos orphelines');
-        band = '<div class="albh" title="' + esc(path) + '"><span class="albh-n">' + esc(path) + '</span><span class="cnt">' + albN[p.alb] + tx(' photo') + (albN[p.alb] > 1 ? 's' : '') + (k === 0 && CUR.page > 0 ? tx(' · suite') : '') + '</span></div>';
+        band = '<div class="albh" title="' + esc(path) + '">' + (p.alb && albMap[p.alb] ? IC_ALB : IC_ORPH) + '<span class="albh-n">' + esc(path) + '</span><span class="cnt">' + albN[p.alb] + tx(' photo') + (albN[p.alb] > 1 ? 's' : '') + (k === 0 && CUR.page > 0 ? tx(' · suite') : '') + '</span></div>';
       }
       lastAlb = p.alb;
       return band + tileHtml(p);
@@ -311,9 +319,9 @@
       const chips = [];
       Array.from(p.tags).sort(ncmp).forEach(t => chips.push(q && q.rem.has(t) ? '<span class="chip rem" title="' + esc(t) + '">− ' + esc(t) + '</span>' : '<span class="chip n" title="' + esc(t) + '">' + esc(t) + '</span>'));
       if (q) { q.add.forEach(t => chips.push('<span class="chip" title="' + esc(t) + '">+ ' + esc(t) + '</span>')); }
-      if (!chips.length) { chips.push(tx('<span class="chip" style="background:transparent;color:var(--muted);font-weight:400">aucun tag</span>')); }
+      if (!chips.length) { chips.push(tx('<span class="chip none">aucun tag</span>')); }
       return '<div class="tile' + (sel.has(p.id) ? ' sel' : '') + '" tabindex="0" draggable="true" data-id="' + p.id + '">' +
-        '<img class="ph" loading="lazy" draggable="false" alt="" src="' + esc(p.thumb) + '"><span class="tick">✓</span>' +
+        '<img class="ph" loading="lazy" draggable="false" alt="" src="' + esc(p.thumb) + '"><span class="tick"><i class="icon-ok"></i></span>' +
         '<div class="cap"><span class="fn" title="' + esc(p.file) + '">' + esc(p.file) + '</span><span class="chips">' + chips.join('') + '</span></div></div>';
     }
   }
@@ -339,7 +347,7 @@
 
   function renderPanel() {
     const ids = Array.from(sel), N = ids.length;
-    $('#panel-h').innerHTML = tx('Tags de la sélection <span class="cnt">') + N + tx(' photo') + (N > 1 ? 's' : '') + '</span>';
+    $('#panel-h').innerHTML = tx('Tags de la sélection') + ' <span class="cnt">' + N + tx(' photo') + (N > 1 ? 's' : '') + '</span>';
     const f = pFilter.trim().toLowerCase();
     const info = t => {
       const have = ids.filter(id => PH[id] && eff(PH[id]).has(t)).length;
@@ -358,12 +366,12 @@
           const path = tagPath[c.name] || [c.name];
           if (!show(c.name, path)) { return; }
           const i = info(c.name);
-          out += '<div class="row' + (i.chg ? ' chg' : '') + '" tabindex="0" data-t="' + esc(c.name) + '"><span class="cb ' + i.st + '">' + (i.st === 'all' ? '✓' : i.st === 'some' ? '–' : '') + '</span><span class="t"><b title="' + esc(path.join(' › ')) + '">' + esc(c.name) + '</b></span><span class="n">' + (N ? i.have + '/' + N : '') + '</span></div>';
+          out += '<div class="row ' + (N ? i.st : '') + (i.chg ? ' chg' : '') + '" tabindex="0" data-t="' + esc(c.name) + '"><span class="cb ' + i.st + '">' + (i.st === 'all' ? '✓' : i.st === 'some' ? '–' : '') + '</span><span class="t"><b title="' + esc(path.join(' › ')) + '">' + esc(c.name) + '</b></span>' + (i.chg ? tx('<span class="pm">en attente</span>') : '') + '<span class="n">' + (N && i.st === 'some' ? i.have + '/' + N : '') + '</span></div>';
         } else {
           const s2 = rec(c);
           if (!s2) { return; }
           const open = (f || pOnly) ? true : !pCol.has(c.key);
-          out += '<div class="grow" data-pcar="' + esc(c.key) + '"><span class="caret">' + (open ? '▼' : '▶') + '</span>' + esc(c.name) + '</div>' + (open ? '<div class="gkids">' + s2 + '</div>' : '');
+          out += '<div class="grow" data-pcar="' + esc(c.key) + '">' + caretHtml('', true, open) + (c.name.charAt(0) === '(' ? IC_NOPATH : IC_GROUP) + '<span class="nm">' + esc(c.name) + '</span></div>' + (open ? '<div class="gkids">' + s2 + '</div>' : '');
         }
       });
       return out;
@@ -373,9 +381,14 @@
     $('#rows').innerHTML = (N ? '' : tx('<div class="hint">Sélectionnez des photos au centre pour cocher leurs tags.</div>')) + (html || tx('<div class="empty">Aucun tag ne correspond.</div>'));
   }
 
+  // barre d'enregistrement en bas de l'écran Étiqueter (forme de la « savebar » de l'administration)
   function renderBar() {
     const c = pendCount();
-    $('#pendbar').innerHTML = c.ph ? '<div class="pendbar"><span>' + c.ph + tx(' photo') + (c.ph > 1 ? 's' : '') + tx(' à modifier · ') + c.ch + tx(' changement') + (c.ch > 1 ? 's' : '') + tx(' dans la file</span><button class="btn" id="cancel">Annuler tout</button><button class="btn pend" id="preview">Aperçu et appliquer</button></div>') : '';
+    const start = c.ph ? c.ph + tx(' photo') + (c.ph > 1 ? 's' : '') + tx(' à modifier') : tx('Les modifications restent en attente jusqu’à « Aperçu et appliquer » ; elles sont alors écrites dans les fichiers.');
+    $('#pendbar').innerHTML = '<span class="start">' + start + '</span><span class="end">' +
+      (c.ph ? '<span class="badge unsaved"><i class="icon-attention"></i>' + c.ch + tx(' changement') + (c.ch > 1 ? 's' : '') + tx(' en attente') + '</span>' : '') +
+      '<button class="btn" id="cancel"' + (c.ph ? '' : ' disabled') + '><i class="icon-cancel"></i> ' + tx('Annuler tout') + '</button>' +
+      '<button class="btn pend" id="preview"' + (c.ph ? '' : ' disabled') + '><i class="icon-eye"></i> ' + tx('Aperçu et appliquer') + '</button></span>';
   }
 
   // ---------- aperçu et écriture (file d'attente côté serveur) ----------
@@ -869,7 +882,7 @@
         const s2 = leaf ? '' : rec(c);
         if (f && c.name.toLowerCase().indexOf(f) < 0 && !s2) { return; }
         const open = f ? true : !mCol.has(c.key);
-        out += '<div class="node' + (leaf ? '' : ' group') + (mkey === c.key ? ' sel' : '') + '" tabindex="0" data-mt="' + esc(c.key) + '"><span class="caret" data-mcar="' + esc(c.key) + '">' + (s2 ? (open ? '▼' : '▶') : '') + '</span>' + (leaf ? tx('<span class="leafmark" title="Tag Piwigo"></span>') : '') + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span><span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span></div>' + (s2 && open ? '<div class="gkids">' + s2 + '</div>' : '');
+        out += '<div class="node' + (leaf ? '' : ' group') + (mkey === c.key ? ' sel' : '') + '" tabindex="0" data-mt="' + esc(c.key) + '">' + caretHtml('data-mcar="' + esc(c.key) + '"', !!s2, open) + (leaf ? IC_TAG : c.name.charAt(0) === '(' ? IC_NOPATH : IC_GROUP) + '<span class="nm" title="' + esc(c.name) + '">' + esc(c.name) + '</span><span class="cnt">' + (leaf ? (TAGN[c.name] || 0) : tagSum(c.key)) + '</span></div>' + (s2 && open ? '<div class="gkids">' + s2 + '</div>' : '');
       });
       return out;
     };
@@ -877,6 +890,7 @@
     renderFiche();
     const todo = REC.length;
     $('#rec-n').textContent = todo;
+    recBadges();
   }
 
   let ficheSeq = 0;
@@ -888,12 +902,15 @@
     const leaf = isLeafKey(mkey), name = mkey.split('|').pop(), lv = leavesUnder(mkey);
     const flat = leaf && FLAT[name];
     const can = LEVEL() >= 3 ? '' : tx(' disabled title="Droits insuffisants"');
-    const b = (op, label, cls, always) => '<button class="btn' + (cls ? ' ' + cls : '') + '" data-sop="' + op + '"' + (always && LEVEL() >= 2 ? '' : can) + '>' + label + '</button>';
+    // bouton d'action : pastille de couleur + libellé (boutons « head-button » de l'administration)
+    const OPIC = { rename: 'blue pencil', rename_group: 'blue pencil', place: 'purple move', move_group: 'purple move', merge: 'green object-group', delete: 'red trash', delete_group: 'red trash', newgroup: 'blue flow-tree', newtag: 'green tags' };
+    const b = (op, label, cls, always) => { const ic = OPIC[op].split(' '); return '<button class="btn' + (cls ? ' ' + cls : '') + '" data-sop="' + op + '"' + (always && LEVEL() >= 2 ? '' : can) + '><span class="ic ' + ic[0] + '"><i class="icon-' + ic[1] + '"></i></span>' + label + '</button>'; };
     let actions = '';
     if (synthetic) { actions = '<span class="sub">' + (mkey === NOPHOTO_G ? tx('Regroupement d’affichage : tags créés dans Piwigo et attachés à aucune photo. Rangez-les dans un groupe, ou affectez-les directement dans l’écran Étiqueter (leur groupe est alors demandé), ou supprimez-les.') : tx('Regroupement d’affichage : ces tags n’ont pas de chemin dans les fichiers. Rangez-les dans un groupe, ou fusionnez-les.')) + '</span>'; }
     else if (leaf) { actions = b('rename', tx('Renommer')) + b('place', flat ? tx('Ranger dans un groupe…') : tx('Déplacer…')) + b('merge', tx('Fusionner avec…')) + b('delete', tx('Supprimer'), 'danger'); }
-    else { actions = b('newgroup', tx('+ Sous-groupe'), '', true) + b('newtag', tx('+ Tag ici'), '', true) + b('rename_group', tx('Renommer')) + b('move_group', tx('Déplacer…')) + (lv.length ? '' : b('delete_group', tx('Supprimer'), 'danger')); }
-    el.innerHTML = '<div class="fiche"><div class="fh"><h2>' + esc(name) + '</h2><span class="badge' + (leaf ? ' leaf' : '') + '">' + (leaf ? tx('Tag Piwigo') : tx('Groupe')) + '</span>' + (flat ? '<span class="chip">' + (NOPHOTO[name] ? tx('sans photo') : tx('sans chemin')) + '</span>' : '') + '</div>' +
+    else { actions = b('newgroup', tx('Sous-groupe'), '', true) + b('newtag', tx('Tag ici'), '', true) + b('rename_group', tx('Renommer')) + b('move_group', tx('Déplacer…')) + (lv.length ? '' : b('delete_group', tx('Supprimer'), 'danger')); }
+    const crumbs = synthetic ? '' : '<div class="crumb" style="margin-top:4px">' + mkey.split('|').map(s => '<span class="bc">' + esc(s) + '</span>').join(SEP) + '</div>';
+    el.innerHTML = '<div class="fiche"><div class="fh">' + (leaf ? '<span class="ic green"><i class="icon-tags"></i></span>' : '<span class="ic blue"><i class="icon-flow-tree"></i></span>') + '<div style="min-width:0;flex:1"><h2>' + esc(name) + '</h2>' + crumbs + '</div><span class="badge' + (leaf ? ' leaf' : '') + '">' + (leaf ? tx('Tag Piwigo') : tx('Groupe')) + '</span>' + (flat ? '<span class="badge unsaved">' + (NOPHOTO[name] ? tx('sans photo') : tx('sans chemin')) + '</span>' : '') + '</div>' +
       '<p class="sub">' + (leaf ? tx('Dernier niveau : c’est le tag que Piwigo connaît.') : tx('Niveau intermédiaire : il n’existe que dans les chemins des fichiers.')) + '</p>' +
       tx('<dl class="kv"><dt>Chemin</dt><dd class="mono">') + esc(flat ? (NOPHOTO[name] ? tx('(aucune photo : pas de chemin dans les fichiers)') : tx('(pas de chemin retrouvé dans les fichiers testés)')) : mkey) + '</dd><dt>Photos</dt><dd id="f-n">…</dd>' + (leaf ? '' : tx('<dt>Tags dessous</dt><dd>') + lv.length + '</dd>') +
       tx('<dt>Écrit dans</dt><dd class="mono">') + (leaf ? 'dc:subject, ' : '') + 'lr:hierarchicalSubject, digiKam:TagsList, MicrosoftPhoto, acdsee</dd></dl>' +
@@ -903,7 +920,14 @@
     api('tag_albums', { ids: lv.map(n => TAGID[n]).filter(Boolean).join(',') }).then(r => {
       if (seq !== ficheSeq) { return; }
       $('#f-n').textContent = r.total;
-      $('#f-alb').innerHTML = r.albums.map(a => '<li><span>' + esc(a.alb && albMap[a.alb] ? albPath(a.alb).join(' › ') : tx('Photos orphelines')) + '</span><span class="cnt">' + a.n + '</span></li>').join('') || tx('<li><span style="color:var(--muted)">Aucune photo</span></li>');
+      // un album par ligne ; un SmartAlbum garde l'icône standard, avec ⟳ à droite pour le mettre à jour
+      // (il peut aussi contenir des photos rangées à la main)
+      $('#f-alb').innerHTML = r.albums.map(a => {
+        const al = a.alb && albMap[a.alb] ? albMap[a.alb].a : null;
+        const sm = al && (al.smart || al.broken) ? '<span class="smart" data-smart="' + al.id + '" role="button" tabindex="0" title="' + esc((al.broken ? BROKEN_TIP[al.broken] : SMART_TIP) + ' ' + SMART_CLICK) + '"><i class="icon-' + (al.broken ? 'attention' : 'arrows-cw') + '"></i></span>' : '';
+        return '<li>' + (al ? IC_ALB : IC_ORPH) + '<span class="nm">' + (al ? albPath(a.alb).map(esc).join(SEP) : esc(tx('Photos orphelines'))) + '</span>' + sm +
+          (al ? galLink(albAll[al.id] ? 'index.php?/category/' + al.id : '', tx('l’album')) : '') + '<span class="cnt">' + a.n + '</span></li>';
+      }).join('') || tx('<li><span style="color:var(--muted)">Aucune photo</span></li>');
     }).catch(() => { if (seq === ficheSeq) { $('#f-n').textContent = '?'; } });
   }
 
@@ -926,14 +950,14 @@
     const head = tx('<tr><th>Tag dans Piwigo</th><th>Photos</th><th>Constat</th><th>Action</th><th>Cible</th><th></th></tr>');
     const rows = REC.map((r, i) => {
       if (r.status === 'split' || r.status === 'unface') { return recSpecialRow(r, i, can); }
-      const badge = r.conf === 'haute' ? tx('<span class="chip n">suggestion fiable</span>') : tx('<span class="chip">à vérifier</span>');
+      const badge = r.conf === 'haute' ? tx('<span class="status ok"><i class="icon-ok"></i>suggestion fiable</span>') : tx('<span class="status warn">à vérifier</span>');
       const opts = Object.keys(RACT).map(k => '<option value="' + k + '"' + (r.act === k ? ' selected' : '') + '>' + RACT[k] + '</option>').join('');
       const needs = r.act === 'merge' || r.act === 'rename' || r.act === 'place';
       const list = r.act === 'merge' ? ' list="dl-tags"' : r.act === 'place' ? ' list="dl-groups"' : '';
       const ph = r.act === 'merge' ? tx('Tag existant…') : r.act === 'rename' ? tx('Nouveau nom…') : tx('Groupe (ALBUM|…)');
       const tg = needs ? '<input type="text" class="rec-tg" data-ri="' + i + '" value="' + esc(r.target || '') + '" placeholder="' + ph + '"' + list + tx(' aria-label="Cible pour ') + esc(r.name) + '">' : '<span class="cnt">—</span>';
-      const btn = r.act === 'skip' ? tx('<span class="cnt">ignoré</span>') : '<button class="btn pend" data-rgo="' + i + '"' + can + tx('>Appliquer</button>');
-      return '<tr><td><div class="nm">' + esc(r.name) + '</div>' + (r.status === 'nofile' ? tx('<div class="why">fichier introuvable</div>') : '') + '</td><td class="n">' + r.n + '</td><td><div>' + badge + '</div><div class="why">' + esc(r.why) + '</div></td>' +
+      const btn = r.act === 'skip' ? tx('<span class="cnt">ignoré</span>') : '<button class="btn pend" data-rgo="' + i + '"' + can + '><i class="icon-eye"></i> ' + tx('Appliquer') + '</button>';
+      return '<tr class="' + (r.status === 'nofile' ? 'r-err' : r.conf === 'haute' ? 'r-ok' : 'r-warn') + '"><td><div class="nm">' + esc(r.name) + '</div>' + (r.status === 'nofile' ? tx('<div class="why">fichier introuvable</div>') : '') + '</td><td class="n">' + r.n + '</td><td><div>' + badge + '</div><div class="why">' + esc(r.why) + '</div></td>' +
         '<td><select class="rec-act" data-ri="' + i + tx('" aria-label="Action pour ') + esc(r.name) + '">' + opts + '</select></td><td>' + tg + '</td><td>' + btn + '</td></tr>';
     }).join('');
     $('#rec-table').innerHTML = head + (rows || tx('<tr><td colspan="6" class="why">Aucun tag à réconcilier.</td></tr>'));
@@ -941,7 +965,7 @@
 
   /** Ligne « personne et tag ordinaire » (Séparer) ou « marqué visage à tort » (Ce n'est pas un visage). */
   function recSpecialRow(r, i, can) {
-    const cst = '<div style="margin-bottom:4px"><span class="chip">' + esc(r.chip || '') + '</span></div><div>' + esc(r.why) + '</div>' +
+    const cst = '<div style="margin-bottom:4px"><span class="status warn">' + esc(r.chip || '') + '</span></div><div>' + esc(r.why) + '</div>' +
       (r.fix ? '<div class="why" style="margin-top:3px">' + esc(r.fix) + '</div>' : '');
     let act;
     if (r.status === 'split') {
@@ -951,7 +975,7 @@
     } else {
       act = '<div style="display:flex;justify-content:flex-end"><button class="btn pend" data-rgo="' + i + '"' + can + tx('>Ce n’est pas un visage…</button></div>');
     }
-    return '<tr><td><div class="nm">' + esc(r.name) + '</div></td><td class="n">' + r.n + '</td><td>' + cst + '</td><td colspan="3">' + act + '</td></tr>';
+    return '<tr class="r-warn"><td><div class="nm">' + esc(r.name) + '</div></td><td class="n">' + r.n + '</td><td>' + cst + '</td><td colspan="3">' + act + '</td></tr>';
   }
 
   /** « Ce n'est pas un visage » : le serveur relit les fichiers avant de retirer le tag de la liste des visages. */
@@ -1030,12 +1054,44 @@
   function showScreen(s) {
     screen = s;
     $('#app-tag').hidden = s !== 'tag';
+    $('#pendbar').hidden = s !== 'tag';
     $('#app-mng').hidden = s !== 'mng';
     $('#app-set').hidden = s !== 'set';
-    $$('.stab,.gear').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-screen') === s));
+    $$('.tm-tab[data-screen]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-screen') === s));
+    syncPwgTabs(s);
     renderAll(); renderSet();
     if (s === 'set') { loadLog(); }
   }
+
+  // Onglets de Piwigo (#tabsheet) : Étiqueter, Gérer les tags et Paramètres sont des écrans de cette page ; on bascule
+  // sans recharger, pour garder les changements en attente. L'adresse suit l'écran (lien, rechargement).
+  const pwgTabs = () => PUBLIC ? [] : Array.prototype.slice.call(document.querySelectorAll('#tabsheet .tabsheet a'));
+  const tabOf = a => { const m = /[?&]tab=(tag|mng|set|index)\b/.exec(a.getAttribute('href') || ''); return m ? m[1] : null; };
+  function syncPwgTabs(s) {
+    pwgTabs().forEach(a => {
+      const li = a.closest('li');
+      if (li) { li.className = tabOf(a) === s ? 'selected_tab' : 'normal_tab'; }
+    });
+    if (!PUBLIC && window.history && history.replaceState) {
+      try { const u = new URL(location.href); u.searchParams.set('tab', s); history.replaceState(null, '', u.toString()); } catch (_) { /* adresse inchangée */ }
+    }
+  }
+  pwgTabs().forEach(a => {
+    const s = tabOf(a);
+    if (s && s !== 'index') { a.addEventListener('click', e => { e.preventDefault(); closeCtx(); showScreen(s); }); }
+  });
+  // nombre de tags à réconcilier, à côté de « Gérer les tags » (onglet de Piwigo et onglet interne)
+  function recBadges() {
+    const n = REC.length;
+    pwgTabs().filter(a => tabOf(a) === 'mng').concat($$('.tm-tab[data-screen="mng"]')).forEach(a => {
+      let sp = a.querySelector('.tm-n');
+      if (!n) { if (sp) { sp.remove(); } return; }
+      if (!sp) { sp = document.createElement('span'); sp.className = 'tm-n cnt'; (a.querySelector('span') || a).appendChild(sp); }
+      sp.textContent = n;
+    });
+  }
+  // quitter la page (onglet Index, autre menu) avec des changements en attente : le navigateur demande confirmation
+  window.addEventListener('beforeunload', e => { if (pendCount().ph && !jobRunning) { e.preventDefault(); e.returnValue = ''; } });
   function showSub(s) {
     sub = s;
     $('#mng-tree').hidden = s !== 'tree';
@@ -1048,10 +1104,12 @@
   root.addEventListener('click', function (e) {
     const t = e.target;
     const g = sel2 => t.closest(sel2);
+    // bouton qui contient une icône : le clic arrive sur l'icône, on prend l'identifiant du bouton
+    const btn = t.closest('button,a'), tid = (btn && btn.id) || t.id;
     let x;
     if (g('a.gal')) { return; } // lien vers la galerie : le navigateur l'ouvre, la sélection ne change pas
-    if (g('#fs-toggle')) { setFull(!root.classList.contains('full')); return; }
-    if ((x = g('[data-screen]'))) { showScreen(x.getAttribute('data-screen')); return; }
+    if (g('#fs-toggle')) { return; } // écouteur propre (le bouton passe dans le titre de Piwigo, hors de #tm-app)
+    if ((x = g('.tm-tab[data-screen]'))) { showScreen(x.getAttribute('data-screen')); return; }
     if ((x = g('[data-sub]'))) { showSub(x.getAttribute('data-sub')); return; }
     if ((x = g('[data-car]'))) { const k = x.getAttribute('data-car'); collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k); renderTree(); return; }
     if ((x = g('[data-tab]'))) {
@@ -1073,22 +1131,22 @@
       renderToolbar(); renderGrid(); renderPanel(); return;
     }
     if ((x = g('[data-page]'))) { if (!x.disabled) { gotoPage(parseInt(x.getAttribute('data-page'), 10)); } return; }
-    if (t.id === 'selall') { sel = new Set(visible().map(p => p.id)); renderToolbar(); renderGrid(); renderPanel(); return; }
-    if (t.id === 'selnone') { sel = new Set(); renderToolbar(); renderGrid(); renderPanel(); return; }
-    if (t.id === 'rmtag') { setTag(Array.from(sel), view.key.split('|').pop(), false); renderAll(); return; }
-    if (t.id === 'cancel') { Object.keys(pend).forEach(k => delete pend[k]); renderAll(); toast(tx('Modifications annulées')); return; }
-    if (t.id === 'preview') { openPreview(); return; }
-    if (t.id === 'dcancel') { if (!jobRunning) { $('#layer').innerHTML = ''; } return; }
-    if (t.id === 'dgo') { startJob(); return; }
-    if (t.id === 'sapply') { applyStruct(); return; }
-    if (t.id === 'jretry') { resumeJob(parseInt(t.getAttribute('data-job'), 10), parseInt(t.getAttribute('data-total'), 10), true); return; }
+    if (tid === 'selall') { sel = new Set(visible().map(p => p.id)); renderToolbar(); renderGrid(); renderPanel(); return; }
+    if (tid === 'selnone') { sel = new Set(); renderToolbar(); renderGrid(); renderPanel(); return; }
+    if (tid === 'rmtag') { setTag(Array.from(sel), view.key.split('|').pop(), false); renderAll(); return; }
+    if (tid === 'cancel') { Object.keys(pend).forEach(k => delete pend[k]); renderAll(); toast(tx('Modifications annulées')); return; }
+    if (tid === 'preview') { openPreview(); return; }
+    if (tid === 'dcancel') { if (!jobRunning) { $('#layer').innerHTML = ''; } return; }
+    if (tid === 'dgo') { startJob(); return; }
+    if (tid === 'sapply') { applyStruct(); return; }
+    if (tid === 'jretry') { resumeJob(parseInt(btn.getAttribute('data-job'), 10), parseInt(btn.getAttribute('data-total'), 10), true); return; }
     if ((x = g('[data-jretry]'))) { resumeJob(parseInt(x.getAttribute('data-jretry'), 10), parseInt(x.getAttribute('data-jtotal'), 10), true); return; }
     if ((x = g('[data-sop]'))) { if (!x.disabled) { runStructOp(x.getAttribute('data-sop'), mkey); } return; }
     if ((x = g('[data-rgo]'))) { recApply(parseInt(x.getAttribute('data-rgo'), 10)); return; }
-    if (t.id === 'rec-bulk') { recBulk(); return; }
-    if (t.id === 'nt-go') { createFromPanel(); return; }
-    if (t.id === 'mt-go') { createFromMng(); return; }
-    if (t.id === 'mg-go') { createGroupFromMng(); return; }
+    if (tid === 'rec-bulk') { recBulk(); return; }
+    if (tid === 'nt-go') { createFromPanel(); return; }
+    if (tid === 'mt-go') { createFromMng(); return; }
+    if (tid === 'mg-go') { createGroupFromMng(); return; }
     if ((x = g('[data-jresume]'))) { resumeJob(parseInt(x.getAttribute('data-jresume'), 10), parseInt(x.getAttribute('data-jtotal'), 10)); return; }
     if ((x = g('[data-jcancel]'))) { cancelJob(parseInt(x.getAttribute('data-jcancel'), 10)); return; }
     if ((x = g('[data-jerr]'))) { showJobErrors(parseInt(x.getAttribute('data-jerr'), 10)); return; }
@@ -1103,12 +1161,12 @@
     if ((x = g('[data-mt]'))) { mkey = x.getAttribute('data-mt'); renderMng(); return; }
     // paramètres
     if ((x = g('[data-rdel]'))) { S.rights.splice(parseInt(x.getAttribute('data-rdel'), 10), 1); renderSet(); return; }
-    if (t.id === 'r-add') {
+    if (tid === 'r-add') {
       const kind = $('#r-kind').value, n = $('#r-who').value;
       if (n) { S.rights.push({ k: kind + ':' + n, who: n, type: kind === 'g' ? tx('Groupe') : tx('Utilisateur'), p: [1, 0, 0] }); renderSet(); }
       return;
     }
-    if (t.id === 'set-save') {
+    if (tid === 'set-save') {
       api('save_settings', { settings: { original: S.original, thumb: S.thumb, tw: S.tw, reserved: S.reserved, rights: S.rights } })
         .then(r => {
           S.original = r.saved.original; S.thumb = r.saved.thumb; S.tw = r.saved.tw; applyThumbWidth(S.tw); S.rights = r.saved.rights; S.reserved = r.saved.reserved; renderSet();
@@ -1282,16 +1340,28 @@
   });
 
   // ---------- plein écran (masque les menus et l'en-tête de Piwigo) ----------
+  // Le bouton est à droite des onglets de Piwigo (#tabsheet ; pas dans le h1, que l'administration réécrit après le
+  // chargement) ; en plein écran, il passe dans la barre d'onglets interne.
+  const fsBtn = document.getElementById('fs-toggle');
+  const fsHome = fsBtn ? fsBtn.parentNode : null;
   function setFull(on) {
     root.classList.toggle('full', on);
     document.body.classList.toggle('tm-full', on);
-    const b = $('#fs-toggle');
-    if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.textContent = on ? tx('✕ Quitter le plein écran') : tx('⛶ Plein écran'); }
+    const b = fsBtn;
+    if (b) {
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.innerHTML = on ? '<i class="icon-resize-small"></i> ' + esc(tx('Quitter le plein écran')) : '<i class="icon-resize-full"></i> ' + esc(tx('Plein écran'));
+      const ts = document.getElementById('tabsheet');
+      if (on || !ts) { if (b.parentNode !== fsHome) { fsHome.appendChild(b); } } else if (b.parentNode !== ts) { ts.insertBefore(b, ts.firstChild); }
+    }
     try { localStorage.setItem('tm_full', on ? '1' : '0'); } catch (_) { /* sans stockage */ }
   }
+  if (fsBtn) { fsBtn.addEventListener('click', () => setFull(!root.classList.contains('full'))); }
   if (!PUBLIC) {
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && root.classList.contains('full') && !$('#layer').innerHTML) { setFull(false); } });
-    try { if (localStorage.getItem('tm_full') === '1') { setFull(true); } } catch (_) { /* sans stockage */ }
+    let full = false;
+    try { full = localStorage.getItem('tm_full') === '1'; } catch (_) { /* sans stockage */ }
+    setFull(full);
   } else {
     document.body.classList.add('tm-full');
   }
@@ -1305,7 +1375,11 @@
 
   // ---------- démarrage ----------
   async function boot() {
-    $('#tm-sub').textContent = tx('Chargement des albums et des tags…');
+    // écran de départ (onglet de Piwigo demandé) ; surtout PAS « data-screen » sur #tm-app : le gestionnaire de clic
+    // prendrait chaque clic dans l'application pour un clic d'onglet
+    const first0 = root.getAttribute('data-start');
+    if (first0 === 'mng' || (first0 === 'set' && !PUBLIC)) { showScreen(first0); } else { showScreen('tag'); }
+    $('#tree').innerHTML = '<div class="loading">' + tx('Chargement des albums et des tags…') + '</div>';
     try {
       const res = await Promise.all([api('albums'), api('tags'), api('settings')]);
       buildAlbums(res[0].albums);
@@ -1318,14 +1392,14 @@
       const first = topTag();
       mkey = first ? tagPath[first].slice(0, -1).join('|') : '';
       applyL();
-      $('#tm-sub').textContent = tx('Les modifications restent en attente jusqu’à « Aperçu et appliquer » ; elles sont alors écrites dans les fichiers.');
       applyThumbWidth(S.tw);
+      if (screen === 'mng' && LEVEL() < 2) { showScreen('tag'); }
       await loadPhotos(0);
       renderAll(); renderSet(); checkActive();
+      if (screen === 'set') { loadLog(); }
       api('recon').then(r => { REC = r.rows; renderMng(); renderRec(); }).catch(() => { /* facultatif */ });
     } catch (e) {
       $('#tree').innerHTML = tx('<div class="empty">Chargement impossible : ') + esc(e.message) + '</div>';
-      $('#tm-sub').textContent = '';
     }
   }
   boot();

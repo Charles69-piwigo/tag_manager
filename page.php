@@ -52,6 +52,11 @@ $template->assign(array(
   'TM_CSS_V' => @filemtime(TAGMANAGER_PATH . 'css/app.css'),
   'TM_JS_V' => @filemtime(TAGMANAGER_PATH . 'js/app.js'),
   'TM_PUBLIC' => true,
+  'TM_SCREEN' => 'tag',
+  'TM_DARK' => false,
+  'TM_INDEX_URL' => '',
+  // icônes de l'administration (police fontello), chargées à la main : la page publique n'a pas l'en-tête de l'admin
+  'TM_ICONS' => get_absolute_root_url() . 'admin/themes/default/fontello/css/fontello.css',
   'TM_I18N' => tagmanager_js_dict_json(),
   'TM_GALLERY' => get_absolute_root_url(),
   'TM_LEVEL' => $tm_level,

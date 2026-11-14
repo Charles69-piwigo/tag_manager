@@ -11,6 +11,17 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.6 - 14/11/2026 - regroupe 1.5.1
+    modifié : interface habillée comme l'administration de Piwigo : onglets de Piwigo (Étiqueter, Gérer les tags, Index, Paramètres), icônes, boutons et couleurs de l'admin, thème sombre « roma » suivi
+    modifié : « Tags de la sélection » un tag par ligne ; barre d'enregistrement en bas de l'écran Étiqueter ; fiche d'un tag avec albums concernés en colonne ; Paramètres et Index au format de la page Configuration
+    ajouté : changer d'onglet garde les changements en attente ; confirmation si on quitte la page avec des changements en attente ; nombre de tags à réconcilier sur l'onglet « Gérer les tags »
+
+version 1.5.1 - 14/11/2026
+    modifié : habillage de l'interface aligné sur l'administration de Piwigo (demande sur le forum) : onglets de Piwigo (Étiqueter, Gérer les tags, Index, Paramètres) au lieu des deux niveaux d'onglets du plugin ; icônes de l'administration (police fontello) ; boutons orange / gris de Piwigo ; pastilles de couleur (dossier, groupe, tag) ; fil d'Ariane en étiquettes ; barre d'enregistrement en bas de l'écran Étiqueter (changements en attente, « Aperçu et appliquer ») ; Paramètres et Index sous la forme de la page Configuration ; fenêtres, réconciliation et fiche d'un tag au même style. Thème sombre « roma » suivi. Feuille css/app.css écrite à la main (n'est plus générée depuis la maquette). Le design 1.5 est conservé dans la branche git design-v1.5
+    modifié : « Étiqueter » et « Gérer les tags » / « Paramètres » restent des écrans de la même page : un clic sur l'onglet de Piwigo bascule sans recharger (les changements en attente sont gardés) ; quitter la page avec des changements en attente demande confirmation ; nombre de tags à réconcilier affiché sur l'onglet « Gérer les tags »
+    modifié : fiche d'un tag : albums concernés un par ligne, avec leur chemin ; un SmartAlbum garde l'icône d'album, avec ⟳ à droite pour le mettre à jour
+    modifié : bouton « Plein écran » à droite des onglets de Piwigo ; en plein écran, onglets internes au même style
+
 version 1.5 - 12/11/2026 - regroupe 1.4.1
     ajouté : tags créés dans Piwigo et attachés à aucune photo, jusqu'ici invisibles : regroupement « (sans photo) » dans « Gérer les tags », « Étiqueter › Tags » et « Tags de la sélection » ; au premier ajout à des photos, une fenêtre demande leur groupe d'accueil ; compteur « sans photo » dans l'onglet Index
     ajouté : champ de filtre au-dessus des arbres « Étiqueter › Albums » et « Étiqueter › Tags » (sans casse ni accents, un filtre par onglet)

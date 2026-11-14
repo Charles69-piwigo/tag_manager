@@ -1,18 +1,19 @@
+<link rel="stylesheet" href="{$TM_ASSETS}css/app.css?v={$TM_CSS_V}">
 {literal}
 <style>
-.tm-box{margin:0 0 20px 0;max-width:900px}
-.tm-box h3{margin:0 0 8px 0}
-.tm-stats{display:flex;flex-wrap:wrap;gap:8px 24px;margin:0 0 12px 0}
-.tm-stats div{min-width:110px}
-.tm-stats b{display:block;font-size:20px}
-.tm-bar{height:10px;background:#ddd;border-radius:5px;overflow:hidden;margin:10px 0 6px 0}
-.tm-bar>div{height:100%;width:0;background:#2f7a4d}
-.tm-tree ul{list-style:none;margin:0;padding-left:18px}
-.tm-tree>ul{padding-left:0}
-.tm-tree .tm-group{font-weight:bold;color:#555}
-.tm-tree .tm-group>ul{font-weight:normal;color:#222}
-.tm-tree .tm-nb{color:#888;font-size:11px;font-family:monospace}
-.tm-muted{color:#888}
+#tm-app.tm-index{height:auto;min-height:0;padding-bottom:30px}
+#tm-app .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;max-width:880px}
+#tm-app .stat{background:var(--surface);box-shadow:var(--shadow);padding:10px 12px;color:var(--txt);font-size:11.5px}
+#tm-app .stat b{display:block;font-size:20px;font-weight:600;color:var(--strong);font-variant-numeric:tabular-nums}
+#tm-app .bar{height:8px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden;flex:1 1 240px;max-width:420px}
+#tm-app .bar>div{height:100%;width:0;background:var(--acc)}
+#tm-app .itree ul{list-style:none;margin:0;padding-left:18px}
+#tm-app .itree>ul{padding-left:0}
+#tm-app .itree li{line-height:1.7}
+#tm-app .itree .tm-group{font-weight:700;color:var(--strong)}
+#tm-app .itree .tm-group>ul{font-weight:400;color:var(--txt)}
+#tm-app .itree .tm-nb{display:inline-block;font-size:10.5px;font-weight:700;padding:0 6px;border-radius:9px;background:var(--grey-b);color:var(--grey-f);margin-left:4px}
+#tm-app .plist li{display:block}
 </style>
 {/literal}
 
@@ -20,48 +21,58 @@
   <h2>Tag Manager</h2>
 </div>
 
-<div id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}">
+<div id="tm-app" class="tm-index{if $TM_DARK} dark{/if}">
+<div class="conf" id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}">
 
-  <div class="tm-box">
-    <h3>{'Index des chemins de tags'|@translate}</h3>
-    <p class="tm-muted">{'Piwigo ne conserve que le dernier niveau des tags. L’index lit une photo par tag pour retrouver son chemin complet dans les fichiers (lecture seule : aucun fichier ni aucun tag n’est modifié).'|@translate}</p>
+  <fieldset>
+    <legend><span class="ic blue"><i class="icon-chart-bar"></i></span>{'Index des chemins de tags'|@translate}</legend>
+    <ul>
+      <li><p class="help" style="margin-top:0">{'Piwigo ne conserve que le dernier niveau des tags. L’index lit une photo par tag pour retrouver son chemin complet dans les fichiers (lecture seule : aucun fichier ni aucun tag n’est modifié).'|@translate}</p>
+        <div class="stats">
+          <div class="stat"><b>{$TM_SUMMARY.total_tags}</b>{'tags utilisés'|@translate}</div>
+          <div class="stat"><b>{$TM_SUMMARY.ok}</b>{'avec chemin'|@translate}</div>
+          <div class="stat"><b>{$TM_SUMMARY.flat}</b>{'à plat'|@translate}</div>
+          <div class="stat"><b>{$TM_SUMMARY.nofile}</b>{'fichier introuvable'|@translate}</div>
+          <div class="stat"><b>{$TM_SUMMARY.nophoto}</b>{'sans photo'|@translate}</div>
+        </div></li>
+    </ul>
+  </fieldset>
 
-    <div class="tm-stats">
-      <div><b>{$TM_SUMMARY.total_tags}</b>{'tags utilisés'|@translate}</div>
-      <div><b>{$TM_SUMMARY.ok}</b>{'avec chemin'|@translate}</div>
-      <div><b>{$TM_SUMMARY.flat}</b>{'à plat'|@translate}</div>
-      <div><b>{$TM_SUMMARY.nofile}</b>{'fichier introuvable'|@translate}</div>
-      <div><b>{$TM_SUMMARY.nophoto}</b>{'sans photo'|@translate}</div>
-    </div>
-
-    <p>
-      <button type="button" class="submit" id="tm-run">{'Lancer l’indexation'|@translate}</button>
-      {if $TM_LAST}<span class="tm-muted">{'Dernière indexation'|@translate} : {$TM_LAST}</span>{/if}
-    </p>
-    <div class="tm-bar" id="tm-barwrap" hidden><div id="tm-bar"></div></div>
-    <div class="tm-muted" id="tm-msg"></div>
-  </div>
+  <fieldset>
+    <legend><span class="ic purple"><i class="icon-arrows-cw"></i></span>{'Indexation'|@translate}</legend>
+    <ul>
+      <li>
+        <button type="button" class="btn primary" id="tm-run"><i class="icon-arrows-cw"></i> {'Lancer l’indexation'|@translate}</button>
+        <div class="bar" id="tm-barwrap" hidden><div id="tm-bar"></div></div>
+        {if $TM_LAST}<span class="badge">{'Dernière indexation'|@translate} : {$TM_LAST}</span>{/if}
+        <p class="help" id="tm-msg"></p>
+      </li>
+    </ul>
+  </fieldset>
 
   {if $TM_PROBLEMS}
-  <div class="tm-box">
-    <h3>{'Tags sans chemin hiérarchique'|@translate}</h3>
-    <p class="tm-muted">{'« À plat » : aucun des fichiers testés ne porte ce tag avec un niveau parent (huit photos au plus sont testées). Il peut exister avec son chemin dans d’autres fichiers. « Introuvable » : aucun des fichiers testés n’est lisible depuis le serveur.'|@translate}</p>
-    <ul>
+  <fieldset>
+    <legend><span class="ic yellow"><i class="icon-attention"></i></span>{'Tags sans chemin hiérarchique'|@translate}</legend>
+    <ul class="plist">
+      <li><p class="help" style="margin-top:0">{'« À plat » : aucun des fichiers testés ne porte ce tag avec un niveau parent (huit photos au plus sont testées). Il peut exister avec son chemin dans d’autres fichiers. « Introuvable » : aucun des fichiers testés n’est lisible depuis le serveur.'|@translate}</p></li>
     {foreach from=$TM_PROBLEMS item=p}
-      <li>{$p.name|escape} <span class="tm-muted">({if $p.status == 'flat'}{'à plat'|@translate}{else}{'fichier introuvable'|@translate}{/if})</span></li>
+      <li><b style="color:var(--strong)">{$p.name|escape}</b> <span class="status {if $p.status == 'flat'}n{else}err{/if}">{if $p.status == 'flat'}{'à plat'|@translate}{else}{'fichier introuvable'|@translate}{/if}</span></li>
     {/foreach}
     </ul>
-  </div>
+  </fieldset>
   {/if}
 
-  <div class="tm-box">
-    <h3>{'Arbre indexé'|@translate}</h3>
+  <fieldset>
+    <legend><span class="ic green"><i class="icon-flow-tree"></i></span>{'Arbre indexé'|@translate}</legend>
+    <ul><li style="display:block">
     {if $TM_TREE}
-      <div class="tm-tree">{$TM_TREE}</div>
+      <div class="itree">{$TM_TREE}</div>
     {else}
-      <p class="tm-muted">{'Aucun chemin indexé pour l’instant.'|@translate}</p>
+      <p class="help">{'Aucun chemin indexé pour l’instant.'|@translate}</p>
     {/if}
-  </div>
+    </li></ul>
+  </fieldset>
+</div>
 </div>
 
 {literal}
