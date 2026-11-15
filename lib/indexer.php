@@ -154,6 +154,13 @@ SELECT t.id, t.name
   if (intval($last_id) === 0)
   {
     pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ';'); // début d'une indexation : on repart de zéro
+    // chemins de tags supprimés de Piwigo (à la main, ou par une synchronisation après suppression de photos) :
+    // la ligne resterait sinon pour toujours dans l'index (cas « 2023 ISLANDE » sur phototest, 15/11/2026)
+    pwg_query('
+DELETE p FROM ' . TAGMANAGER_PATHS_TABLE . ' p
+  LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
+  WHERE p.kind = \'tag\' AND t.id IS NULL
+;');
   }
 
   foreach ($tags as $tag)
@@ -284,9 +291,9 @@ function tagmanager_index_summary()
   $res = pwg_query('
 SELECT p.status, COUNT(*) AS n, MAX(p.indexed_at) AS last
   FROM ' . TAGMANAGER_PATHS_TABLE . ' p
-    LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
+    JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
   WHERE p.kind = \'tag\' AND ' . tagmanager_sql_not_reserved('p.path', 'p.tag_id') . '
-    AND (t.name IS NULL OR ' . tagmanager_sql_not_name('t.name') . ')
+    AND ' . tagmanager_sql_not_name('t.name') . '
   GROUP BY p.status
 ;');
   while ($r = pwg_db_fetch_assoc($res))
@@ -307,7 +314,7 @@ function tagmanager_index_tree_html()
   $rows = query2array('
 SELECT p.path, p.status, t.name, (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = p.tag_id) AS nb
   FROM ' . TAGMANAGER_PATHS_TABLE . ' p
-    LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
+    JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
   WHERE p.kind = \'tag\' AND p.status = \'ok\' AND ' . tagmanager_sql_not_reserved('p.path', 'p.tag_id') . '
   ORDER BY p.path
 ;');

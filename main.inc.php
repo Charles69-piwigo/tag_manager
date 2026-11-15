@@ -11,6 +11,10 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.6a - 15/11/2026 - regroupe 1.6.1 1.6.2
+    ajouté : supprimer un groupe qui contient des tags : ses tags sont mis « à plat » (les chemins qui passent par le groupe sont retirés des fichiers, chaque photo garde le mot-clé simple), avec aperçu chiffré ; ils passent dans « (sans chemin) » pour être rangés ailleurs
+    corrigé : l'index gardait les chemins des tags supprimés de Piwigo (par exemple après suppression des photos et synchronisation) : ils restaient dans l'arbre indexé et dans le compteur « avec chemin » ; ils sont retirés au début de chaque indexation et ne sont plus affichés
+
 version 1.6 - 14/11/2026 - regroupe 1.5.1
     modifié : interface habillée comme l'administration de Piwigo : onglets de Piwigo (Étiqueter, Gérer les tags, Index, Paramètres), icônes, boutons et couleurs de l'admin, thème sombre « roma » suivi
     modifié : « Tags de la sélection » un tag par ligne ; barre d'enregistrement en bas de l'écran Étiqueter ; fiche d'un tag avec albums concernés en colonne ; Paramètres et Index au format de la page Configuration

@@ -16,6 +16,11 @@
  *       chemin, ajoute aussi le chemin (sert à « ranger » un tag).
  *   array('op' => 'replace_prefix', 'from' => array(...), 'to' => array(...))
  *       renomme ou déplace un groupe : tout chemin qui commence par 'from' commence par 'to'.
+ *   array('op' => 'drop_prefix', 'from' => array(...))
+ *       supprime un groupe en mettant ses tags « à plat » : tout chemin qui commence par 'from' est retiré
+ *       des listes de chemins ; les listes de feuilles (dc:subject, IPTC, XPKeywords) ne changent pas.
+ *   array('op' => 'add_leaf', 'name' => 'Tag')
+ *       ajoute le nom aux seules listes de feuilles s'il manque (tag « à plat » que le fichier ne portait pas)
  */
 
 if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
@@ -211,6 +216,13 @@ function tagmanager_path_op(array $segs, array $op)
       return array_merge($op['to'], array_slice($segs, $k));
     }
   }
+  elseif ($op['op'] === 'drop_prefix')
+  {
+    if (tagmanager_segs_start_with($segs, $op['from']))
+    {
+      return null;
+    }
+  }
   return $segs;
 }
 
@@ -296,7 +308,14 @@ function tagmanager_list_apply(array $list, $kind, array $ops)
       $out[] = ($n === $segs) ? $s : implode($sep, $n);
     }
 
-    if ($op['op'] === 'add')
+    if ($op['op'] === 'add_leaf')
+    {
+      if ($kind === 'leaf' && !tagmanager_in_names($op['name'], $out))
+      {
+        $out[] = $op['name'];
+      }
+    }
+    elseif ($op['op'] === 'add')
     {
       if ($kind === 'leaf')
       {
@@ -466,10 +485,10 @@ function tagmanager_value_is_stale($t, array $op)
     }
     return tagmanager_in_names($op['from'], $c);
   }
-  if ($op['op'] === 'replace_prefix')
+  if ($op['op'] === 'replace_prefix' || $op['op'] === 'drop_prefix')
   {
     $k = count($op['from']);
-    if ($k > 0 && tagmanager_segs_start_with($op['to'], $op['from']))
+    if ($k > 0 && $op['op'] === 'replace_prefix' && tagmanager_segs_start_with($op['to'], $op['from']))
     {
       return false;
     }
@@ -496,7 +515,7 @@ function tagmanager_xmp_unmanaged_hits(DOMDocument $doc, array $managed, array $
   $check = array();
   foreach ($ops as $op)
   {
-    if (($op['op'] === 'retag' && (!isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix')
+    if (($op['op'] === 'retag' && (!isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix' || $op['op'] === 'drop_prefix')
     {
       $check[] = $op;
     }
@@ -625,7 +644,7 @@ function tagmanager_stale_entries(array $lists, array $ops)
       }
       foreach ($ops as $op)
       {
-        if (($op['op'] === 'retag' && ($kind !== 'leaf' || !isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix')
+        if (($op['op'] === 'retag' && ($kind !== 'leaf' || !isset($op['leaf_mode']) || $op['leaf_mode'] === 'normal')) || $op['op'] === 'replace_prefix' || $op['op'] === 'drop_prefix')
         {
           $segs = ($kind === 'leaf') ? array($v) : tagmanager_split($v, $sep);
           $stale = false;

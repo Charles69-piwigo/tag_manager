@@ -206,5 +206,8 @@ $lang['une partie'] = 'some';
 $lang['aucune'] = 'none';
 $lang['Taille de l’image chargée'] = 'Size of the loaded image';
 $lang['Indexation'] = 'Indexing';
+$lang['Le groupe « %s » ne contient aucun tag : supprimez-le directement.'] = 'The group "%s" contains no tag: delete it directly.';
+$lang['Ces tags n\'auront plus de chemin : ils passeront dans « (sans chemin) » et dans « À réconcilier », d\'où vous pourrez les ranger dans un autre groupe. Ils restent attachés à leurs photos.'] = 'These tags will no longer have a path: they will move to "(no path)" and "To reconcile", from where you can file them in another group. They stay attached to their photos.';
+$lang['Supprimer le groupe « %s » et mettre ses tags à plat'] = 'Delete the group "%s" and make its tags flat';
 
 ?>

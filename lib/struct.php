@@ -198,6 +198,7 @@ function tagmanager_usage_scan($tag_id, $name, $max = null)
  *   place        tag, group (chemin « A|B » du groupe d'accueil)   [ranger / déplacer un tag]
  *   rename_group group (chemin), name
  *   move_group   group (chemin), target (chemin du nouveau parent)
+ *   flatten_group group (chemin)   [supprimer un groupe qui contient des tags : ses tags passent « à plat »]
  * @return array ok, errors, lines, file_ops (image_id => ops), final, tags (nombre de tags touchés)
  */
 function tagmanager_struct_plan(array $ops)
@@ -496,6 +497,43 @@ function tagmanager_struct_plan(array $ops)
           . tagmanager_t(' (%s tag(s) : %s)', count($leaves), $describe($leaves));
         break;
 
+      case 'flatten_group':
+        // Supprimer un groupe qui contient des tags : les chemins qui passent par lui sont retirés des fichiers,
+        // chaque tag ne garde que son mot-clé simple (dc:subject, IPTC) et passe « à plat » (sans chemin).
+        $P = trim(isset($op['group']) ? (string)$op['group'] : '');
+        if ($P === '' || !$group_exists($P)) { $err(tagmanager_t('Groupe « %s » introuvable.', str_replace('|', ' › ', $P))); break; }
+        if (tagmanager_is_reserved_root($P)) { $err(tagmanager_t('Le groupe « %s » est réservé aux tags de visage.', $P)); break; }
+        $leaves = $leaves_under($P);
+        if (empty($leaves)) { $err(tagmanager_t('Le groupe « %s » ne contient aucun tag : supprimez-le directement.', str_replace('|', ' › ', $P))); break; }
+        $ids = array();
+        $name_of_id = array();
+        foreach ($leaves as $l)
+        {
+          if ($l['reserved']) { $err(tagmanager_t('Le groupe contient un tag de visage (« %s ») : opération refusée.', $l['name'])); break 2; }
+          $mutated[] = $l['name'];
+          $ids[] = $l['id'];
+          $name_of_id[$l['id']] = $l['name'];
+        }
+        $psegs = explode('|', $P);
+        // photo par photo : le chemin du groupe est retiré, et chacun de ses tags y reste comme mot-clé simple
+        foreach (array_chunk($ids, 500) as $chunk)
+        {
+          foreach (query2array('SELECT it.image_id, it.tag_id FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id WHERE it.tag_id IN (' . implode(',', $chunk) . ');') as $r)
+          {
+            $img = (int)$r['image_id'];
+            if (!isset($plan['file_ops'][$img]) || !in_array(array('op' => 'drop_prefix', 'from' => $psegs), $plan['file_ops'][$img], true))
+            {
+              $plan['file_ops'][$img][] = array('op' => 'drop_prefix', 'from' => $psegs);
+            }
+            $plan['file_ops'][$img][] = array('op' => 'add_leaf', 'name' => $name_of_id[(int)$r['tag_id']]);
+          }
+        }
+        $plan['final'][] = array('a' => 'flatten', 'group' => $P, 'ids' => $ids);
+        $plan['warnings'][] = tagmanager_t('Ces tags n\'auront plus de chemin : ils passeront dans « (sans chemin) » et dans « À réconcilier », d\'où vous pourrez les ranger dans un autre groupe. Ils restent attachés à leurs photos.');
+        $plan['lines'][] = tagmanager_t('Supprimer le groupe « %s » et mettre ses tags à plat', str_replace('|', ' › ', $P))
+          . tagmanager_t(' (%s tag(s) : %s)', count($leaves), $describe($leaves));
+        break;
+
       default:
         $err(tagmanager_t('Opération inconnue : « %s ».', $type));
     }
@@ -706,6 +744,21 @@ function tagmanager_job_finalize($job_id)
         if (!empty($f['person_path'])) { tagmanager_upsert_path($src, $f['person_path']); }
         tagmanager_ensure_homonym_table();
         pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' WHERE tag_id = ' . $src . ';');
+        break;
+
+      case 'flatten':
+        // tags du groupe supprimé : plus de chemin (statut « flat », chemin = nom, comme l'indexeur) ;
+        // les sous-groupes vides mémorisés sous ce groupe disparaissent avec lui
+        foreach (array_map('intval', $f['ids']) as $id)
+        {
+          pwg_query('
+INSERT INTO ' . TAGMANAGER_PATHS_TABLE . ' (kind, tag_id, path, sample_image_id, status, indexed_at)
+SELECT \'tag\', id, name, NULL, \'flat\', ' . time() . ' FROM ' . TAGS_TABLE . ' WHERE id = ' . $id . '
+ON DUPLICATE KEY UPDATE path = VALUES(path), status = \'flat\', indexed_at = VALUES(indexed_at)
+;');
+        }
+        $like = pwg_db_real_escape_string(str_replace(array('\\', '%', '_'), array('\\\\', '\\%', '\\_'), $f['group']));
+        pwg_query('DELETE FROM ' . TAGMANAGER_PATHS_TABLE . ' WHERE kind = \'group\' AND (path = \'' . pwg_db_real_escape_string($f['group']) . '\' OR path LIKE \'' . $like . '|%\');');
         break;
 
       case 'delete_tag':

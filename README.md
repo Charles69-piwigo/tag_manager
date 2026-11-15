@@ -15,7 +15,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 ### Fonctionnalités
 
 - **Étiqueter** : navigation par albums (ceux de la galerie, dans l'ordre de « Gestion des albums », que les photos viennent de la synchronisation ou d'un envoi par upload ; « Photos orphelines » pour les webmestres) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ». Par tag, les photos sont regroupées par album, avec un bandeau qui indique l'album. Au survol d'un album ou d'un tag, l'icône ↗ ouvre sa page dans la galerie (nouvel onglet). Un champ de filtre au-dessus de chaque arbre (sans casse ni accents) ouvre les branches qui contiennent le texte cherché.
-- **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; supprimer un groupe vide. Sous la fiche, deux panneaux « Créer un tag » et « Créer un groupe » (un groupe peut être créé au premier niveau). Chaque opération passe par un aperçu chiffré calculé par le serveur.
+- **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; supprimer un groupe (s'il contient des tags, ils sont mis « à plat », sans groupe, et restent sur leurs photos). Sous la fiche, deux panneaux « Créer un tag » et « Créer un groupe » (un groupe peut être créé au premier niveau). Chaque opération passe par un aperçu chiffré calculé par le serveur.
 - **Tags sans photo** : les tags créés dans Piwigo et attachés à aucune photo apparaissent dans un regroupement « (sans photo) ». On peut les ranger, renommer, fusionner ou supprimer ; au premier ajout à des photos, leur groupe est demandé.
 - **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier. Deux cas liés aux visages ont leur propre ligne, en langage courant :
   - un même nom pour une personne et un tag ordinaire : **Séparer** donne un autre nom au tag ordinaire (fichiers et Piwigo), la personne garde le sien ;
@@ -39,7 +39,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 1. Copier le dossier `tag_manager` dans `plugins/` (le nom du dossier doit rester `tag_manager`).
 2. Activer le plugin dans **Administration > Plugins**.
 3. Ouvrir **Plugins > tag_manager**, onglet **Index** : lancer l'indexation (lecture des chemins hiérarchiques dans les fichiers). Relancer l'indexation après des changements faits depuis digiKam.
-4. Onglet **Gestionnaire** : l'interface complète. Réglages dans **Paramètres**.
+4. Onglets **Étiqueter** et **Gérer les tags** : l'interface complète. Réglages dans **Paramètres**.
 
 **Sauvegardez vos photos avant un premier essai réel.** Le plugin réécrit les fichiers. L'option « Créer une copie `.original` » (désactivée par défaut) conserve l'original à côté.
 
@@ -71,7 +71,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 ### Features
 
 - **Tag photos**: browse by albums (the gallery's albums, in the « Manage albums » order, whether photos come from synchronization or upload; « Orphan photos » for webmasters) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply". When browsing by tag, photos are grouped by album, each group with a banner naming the album. Hovering an album or a tag shows a ↗ icon that opens its gallery page in a new tab. A filter box above each tree (case and accent insensitive) opens the branches that contain the searched text.
-- **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; delete an empty group. Below the details pane, two side-by-side boxes "Create a tag" and "Create a group" (a group can be created at the top level). Every operation goes through a server-computed preview with counts.
+- **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; delete a group (if it contains tags, they are made “flat”, without a group, and stay on their photos). Below the details pane, two side-by-side boxes "Create a tag" and "Create a group" (a group can be created at the top level). Every operation goes through a server-computed preview with counts.
 - **Tags without photos**: tags created in Piwigo and attached to no photo appear under a “(no photo)” grouping. They can be placed, renamed, merged or deleted; when first added to photos, their group is asked for.
 - **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file. Two face-related cases get their own plain-language line:
   - the same name used for a person and for an ordinary tag: **Separate** gives the ordinary tag another name (files and Piwigo), the person keeps theirs;
@@ -95,7 +95,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 1. Copy the `tag_manager` folder into `plugins/` (the folder name must stay `tag_manager`).
 2. Activate the plugin in **Administration > Plugins**.
 3. Open **Plugins > tag_manager**, **Index** tab: run the indexing (reads hierarchical paths from the files). Run it again after changes made from digiKam.
-4. **Manager** tab: the full interface. Options are in **Settings**.
+4. **Tagging** and **Manage tags** tabs: the full interface. Options are in **Settings**.
 
 **Back up your photos before a first real run.** The plugin rewrites files. The "Create a `.original` copy" option (off by default) keeps the original next to it.
 

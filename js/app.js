@@ -837,6 +837,15 @@
         tx('Créer'), () => { const v = $('#gin').value.trim(), b = nameBad(v); if (b) { const g = $('#gerr'); g.hidden = false; g.textContent = b; return; } createNode(op === 'newgroup' ? 'group' : 'tag', par, v); });
       return;
     }
+    if (op === 'delete_group' && leavesUnder(key).length) {
+      // groupe qui contient des tags : ils sont mis « à plat » (sans groupe), pas supprimés
+      const n = leavesUnder(key).length;
+      structDialog(tx('Supprimer le groupe « ') + name + tx(' » ?'),
+        tx('<div>Ce groupe contient <b>') + n + ' tag' + (n > 1 ? 's' : '') + tx('</b>. Aucun tag n’est supprimé : chacun reste attaché à ses photos, mais sans groupe (« à plat »).</div>') +
+        tx('<div style="color:var(--muted)">Les chemins qui passent par ce groupe sont retirés des fichiers ; chaque photo garde le mot-clé simple de ses tags. Les tags passent dans « (sans chemin) », d’où vous pourrez les ranger dans un autre groupe.</div>'),
+        () => { structFocus = parent || null; return [{ type: 'flatten_group', group: key }]; }, tx('Voir l’aperçu'));
+      return;
+    }
     if (op === 'delete_group') {
       simpleDialog(tx('Supprimer le groupe « ') + name + tx(' » ?'), tx('<div>Ce groupe ne contient aucun tag. Il est retiré de l’index (aucun fichier n’est touché).</div>'), tx('Supprimer'), () => deleteEmptyGroup(key), true);
       return;
@@ -908,7 +917,7 @@
     let actions = '';
     if (synthetic) { actions = '<span class="sub">' + (mkey === NOPHOTO_G ? tx('Regroupement d’affichage : tags créés dans Piwigo et attachés à aucune photo. Rangez-les dans un groupe, ou affectez-les directement dans l’écran Étiqueter (leur groupe est alors demandé), ou supprimez-les.') : tx('Regroupement d’affichage : ces tags n’ont pas de chemin dans les fichiers. Rangez-les dans un groupe, ou fusionnez-les.')) + '</span>'; }
     else if (leaf) { actions = b('rename', tx('Renommer')) + b('place', flat ? tx('Ranger dans un groupe…') : tx('Déplacer…')) + b('merge', tx('Fusionner avec…')) + b('delete', tx('Supprimer'), 'danger'); }
-    else { actions = b('newgroup', tx('Sous-groupe'), '', true) + b('newtag', tx('Tag ici'), '', true) + b('rename_group', tx('Renommer')) + b('move_group', tx('Déplacer…')) + (lv.length ? '' : b('delete_group', tx('Supprimer'), 'danger')); }
+    else { actions = b('newgroup', tx('Sous-groupe'), '', true) + b('newtag', tx('Tag ici'), '', true) + b('rename_group', tx('Renommer')) + b('move_group', tx('Déplacer…')) + b('delete_group', tx('Supprimer'), 'danger'); }
     const crumbs = synthetic ? '' : '<div class="crumb" style="margin-top:4px">' + mkey.split('|').map(s => '<span class="bc">' + esc(s) + '</span>').join(SEP) + '</div>';
     el.innerHTML = '<div class="fiche"><div class="fh">' + (leaf ? '<span class="ic green"><i class="icon-tags"></i></span>' : '<span class="ic blue"><i class="icon-flow-tree"></i></span>') + '<div style="min-width:0;flex:1"><h2>' + esc(name) + '</h2>' + crumbs + '</div><span class="badge' + (leaf ? ' leaf' : '') + '">' + (leaf ? tx('Tag Piwigo') : tx('Groupe')) + '</span>' + (flat ? '<span class="badge unsaved">' + (NOPHOTO[name] ? tx('sans photo') : tx('sans chemin')) + '</span>' : '') + '</div>' +
       '<p class="sub">' + (leaf ? tx('Dernier niveau : c’est le tag que Piwigo connaît.') : tx('Niveau intermédiaire : il n’existe que dans les chemins des fichiers.')) + '</p>' +
