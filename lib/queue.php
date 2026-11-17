@@ -369,6 +369,9 @@ function tagmanager_sync_image_tags($image_id, array $add_ids, array $rem_ids, $
 function tagmanager_job_step($job_id, $limit)
 {
   @set_time_limit(120);
+  // invalidate_user_cache() (après réécriture) est une fonction de l'administration : la page publique
+  // (page.php) ne la charge pas, d'où une erreur fatale et une réponse non JSON pour les non-webmestres
+  include_once(PHPWG_ROOT_PATH . 'admin/include/functions.php');
   tagmanager_ensure_tables();
   $job_id = intval($job_id);
   $limit = max(1, min(50, intval($limit)));
@@ -553,12 +556,31 @@ SELECT id, created_at, username, status, original, total, done, errors, summary,
   return $rows;
 }
 
+/** Auteur d'un lot (identifiant d'utilisateur), 0 si le lot n'existe pas. */
+function tagmanager_job_owner($job_id)
+{
+  $row = pwg_db_fetch_row(pwg_query('SELECT user_id FROM ' . TAGMANAGER_JOBS_TABLE . ' WHERE id = ' . intval($job_id) . ';'));
+  return $row ? (int)$row[0] : 0;
+}
+
+/** Identifiant de l'utilisateur connecté (-1 si aucun : ne correspond jamais à l'auteur d'un lot). */
+function tagmanager_current_user_id()
+{
+  global $user;
+  return empty($user['id']) ? -1 : (int)$user['id'];
+}
+
+/**
+ * Fichiers en erreur d'un lot. Un non-webmestre ne voit que les photos qu'il peut voir dans la galerie
+ * (le lot peut avoir été lancé par un autre utilisateur).
+ */
 function tagmanager_job_errors($job_id)
 {
+  $vis = tagmanager_visible_sql('i', false); // les erreurs « format non géré » restent listées
   return query2array('
 SELECT i.file, f.message
   FROM ' . TAGMANAGER_JOBFILES_TABLE . ' f JOIN ' . IMAGES_TABLE . ' i ON i.id = f.image_id
-  WHERE f.job_id = ' . intval($job_id) . ' AND f.status = \'error\'
+  WHERE f.job_id = ' . intval($job_id) . ' AND f.status = \'error\'' . ($vis !== '' ? ' AND ' . $vis : '') . '
   ORDER BY f.id
   LIMIT 200
 ;');

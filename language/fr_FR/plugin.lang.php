@@ -1,4 +1,5 @@
 <?php
+defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 // fr_FR est la langue pivot : la clé EST le texte français. On reprend donc telles quelles toutes les clés
 // du fichier anglais : un texte ajouté au plugin s'affiche toujours en français pour un utilisateur
 // francophone, même si on oublie de le déclarer ici (l'anglais est chargé en premier, voir main.inc.php).

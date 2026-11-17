@@ -29,7 +29,7 @@ function tagmanager_ajax($public)
     exit;
   };
 
-  if (!isset($_POST['pwg_token']) || $_POST['pwg_token'] !== get_pwg_token())
+  if (!isset($_POST['pwg_token']) || !is_string($_POST['pwg_token']) || !hash_equals(get_pwg_token(), $_POST['pwg_token']))
   {
     $fail('Invalid token');
   }
@@ -137,6 +137,12 @@ function tagmanager_ajax($public)
 
     case 'job_cancel':
       $need(1);
+      // annuler un lot en cours peut laisser des fichiers réécrits sans la finalisation dans Piwigo :
+      // seul son auteur ou un utilisateur « Gérer : tout » peut le faire
+      if ($level < 3 && tagmanager_job_owner(isset($_POST['job']) ? $_POST['job'] : 0) !== tagmanager_current_user_id())
+      {
+        $fail(tagmanager_t('Seul l’auteur du lot ou un utilisateur « Gérer : tout » peut l’annuler.'));
+      }
       $reply(tagmanager_job_cancel(isset($_POST['job']) ? $_POST['job'] : 0));
 
     // --- opérations de structure : renommer / fusionner / supprimer / ranger (niveau 3) ---

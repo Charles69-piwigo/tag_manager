@@ -1,4 +1,5 @@
 <?php
+defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 // Interface JavaScript (js/app.js) : clé = texte français, valeur = traduction.
 // Fichier tenu par dev/i18n_wrap.js (les entrées ajoutées à la main sont conservées).
 

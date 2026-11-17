@@ -11,6 +11,13 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.7 - 17/11/2026 - regroupe 1.6a.1 1.6a.2
+    sécurité : seuls l'auteur d'un lot et les utilisateurs « Gérer : tout » peuvent l'annuler (un utilisateur « Étiqueter » pouvait interrompre un lot de structure d'un autre, fichiers réécrits sans mise à jour des tags Piwigo) ; la liste des fichiers en erreur d'un lot ne montre à un non-webmestre que les photos qu'il peut voir
+    sécurité : jeton comparé par hash_equals ; index.php de redirection dans chaque dossier ; garde dans les fichiers de langue
+    corrigé : la désinstallation laissait trois tables (lots, fichiers des lots, homonymes) ; maintenance au format maintain.class.php (autonome, idempotente, update() à la mise à jour)
+    corrigé : page publique (utilisateurs non webmestres) : erreur « réponse non JSON » pendant les lots qui réécrivent des fichiers et à la mise à jour d'un SmartAlbum (fonctions de l'administration de Piwigo non chargées hors de l'administration)
+    corrigé : supprimer un tag qui était le seul critère d'un SmartAlbum laissait cet album sans critère, et SmartAlbums y rangeait toutes les photos de la galerie ; l'aperçu signale ces albums et le lot les vide (ils redeviennent des albums ordinaires)
+
 version 1.6a - 15/11/2026 - regroupe 1.6.1 1.6.2
     ajouté : supprimer un groupe qui contient des tags : ses tags sont mis « à plat » (les chemins qui passent par le groupe sont retirés des fichiers, chaque photo garde le mot-clé simple), avec aperçu chiffré ; ils passent dans « (sans chemin) » pour être rangés ailleurs
     corrigé : l'index gardait les chemins des tags supprimés de Piwigo (par exemple après suppression des photos et synchronisation) : ils restaient dans l'arbre indexé et dans le compteur « avec chemin » ; ils sont retirés au début de chaque indexation et ne sont plus affichés

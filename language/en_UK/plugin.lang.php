@@ -1,4 +1,5 @@
 <?php
+defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
 // Clé = texte français (langue pivot, voir language/fr_FR/plugin.lang.php). Les textes de l'interface
 // JavaScript sont dans js.lang.php. Clés manquantes : node dev/i18n_php_keys.js
 
@@ -209,5 +210,8 @@ $lang['Indexation'] = 'Indexing';
 $lang['Le groupe « %s » ne contient aucun tag : supprimez-le directement.'] = 'The group "%s" contains no tag: delete it directly.';
 $lang['Ces tags n\'auront plus de chemin : ils passeront dans « (sans chemin) » et dans « À réconcilier », d\'où vous pourrez les ranger dans un autre groupe. Ils restent attachés à leurs photos.'] = 'These tags will no longer have a path: they will move to "(no path)" and "To reconcile", from where you can file them in another group. They stay attached to their photos.';
 $lang['Supprimer le groupe « %s » et mettre ses tags à plat'] = 'Delete the group "%s" and make its tags flat';
+$lang['SmartAlbum(s) dont ce tag est le seul critère : %s. Ils seront vidés et redeviendront des albums ordinaires (sinon SmartAlbums y rangerait toutes les photos de la galerie). Redéfinissez leurs critères dans SmartAlbums si besoin.'] = 'SmartAlbum(s) whose only criterion is this tag: %s. They will be emptied and become ordinary albums again (otherwise SmartAlbums would put every photo of the gallery in them). Redefine their criteria in SmartAlbums if needed.';
+$lang['SmartAlbum(s) vidé(s), le tag supprimé était leur seul critère : %s.'] = 'SmartAlbum(s) emptied, the deleted tag was their only criterion: %s.';
+$lang['Seul l’auteur du lot ou un utilisateur « Gérer : tout » peut l’annuler.'] = 'Only the author of the batch or a user with "Manage: all" can cancel it.';
 
 ?>

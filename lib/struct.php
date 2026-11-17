@@ -204,6 +204,7 @@ function tagmanager_usage_scan($tag_id, $name, $max = null)
 function tagmanager_struct_plan(array $ops)
 {
   $plan = array('ok' => true, 'errors' => array(), 'warnings' => array(), 'lines' => array(), 'file_ops' => array(), 'final' => array(), 'tags' => 0);
+  $deleted_ids = array();
   if (empty($ops))
   {
     $plan['ok'] = false;
@@ -387,6 +388,7 @@ function tagmanager_struct_plan(array $ops)
           $add_files(array($t['id']), array('op' => 'retag', 'from' => $tname, 'to' => null));
           $plan['final'][] = array('a' => 'delete_tag', 'id' => $t['id']);
           $plan['lines'][] = tagmanager_t('Supprimer « %s »', $tname);
+          $deleted_ids[] = (int)$t['id'];
         }
         else // place
         {
@@ -566,6 +568,14 @@ function tagmanager_struct_plan(array $ops)
   if (!empty($clash))
   {
     $err(tagmanager_t('Un tag de destination est aussi modifié dans le même lot : %s.', implode(', ', array_map(function ($x) { return tagmanager_t('« %s »', $x); }, array_unique($clash)))));
+  }
+
+  // SmartAlbums retire le tag supprimé de ses filtres ; un album dont c'était le seul critère garderait sa
+  // ligne « mode » seule et recevrait toute la galerie : le lot le videra (voir tagmanager_smart_empty)
+  $orphans = tagmanager_smart_orphans($deleted_ids);
+  if (!empty($orphans))
+  {
+    $plan['warnings'][] = tagmanager_t('SmartAlbum(s) dont ce tag est le seul critère : %s. Ils seront vidés et redeviendront des albums ordinaires (sinon SmartAlbums y rangerait toutes les photos de la galerie). Redéfinissez leurs critères dans SmartAlbums si besoin.', implode(', ', array_map(function ($x) { return tagmanager_t('« %s »', $x); }, $orphans)));
   }
 
   $plan['tags'] = count(array_unique($mutated));
@@ -762,7 +772,13 @@ ON DUPLICATE KEY UPDATE path = VALUES(path), status = \'flat\', indexed_at = VAL
         break;
 
       case 'delete_tag':
+        $orphans = tagmanager_smart_orphans(array(intval($f['id']))); // à calculer AVANT delete_tags
         delete_tags(array(intval($f['id'])));       // SmartAlbums retire le tag de ses filtres
+        if (!empty($orphans))
+        {
+          tagmanager_smart_empty(array_keys($orphans));
+          $msgs[] = tagmanager_t('SmartAlbum(s) vidé(s), le tag supprimé était leur seul critère : %s.', implode(', ', array_map(function ($x) { return tagmanager_t('« %s »', $x); }, $orphans)));
+        }
         pwg_query('DELETE FROM ' . TAGMANAGER_PATHS_TABLE . ' WHERE kind = \'tag\' AND tag_id = ' . intval($f['id']) . ';');
         break;
     }
@@ -770,6 +786,80 @@ ON DUPLICATE KEY UPDATE path = VALUES(path), status = \'flat\', indexed_at = VAL
 
   invalidate_user_cache();
   return array('ok' => $ok, 'messages' => $msgs);
+}
+
+/**
+ * SmartAlbums qui n'auraient plus aucun critère si ces tags étaient supprimés : à la suppression d'un tag,
+ * SmartAlbums (smart_delete_tags) retire les filtres « tags » devenus vides mais garde la ligne « mode »,
+ * et un album sans autre critère reçoit alors toutes les photos de la galerie (cas des albums Corse de
+ * phototest, 15/11/2026). Les albums déjà sans critère ne sont pas repris.
+ * @return array id => nom complet (« parent / album »)
+ */
+function tagmanager_smart_orphans(array $tag_ids)
+{
+  $tag_ids = array_values(array_unique(array_map('intval', $tag_ids)));
+  if (empty($tag_ids) || !defined('CATEGORY_FILTERS_TABLE'))
+  {
+    return array();
+  }
+  $rules = array();
+  $gone = array();
+  $res = pwg_query('SELECT category_id, type, value FROM ' . CATEGORY_FILTERS_TABLE . ' WHERE type NOT IN (\'mode\', \'limit\');');
+  while ($r = pwg_db_fetch_assoc($res))
+  {
+    $c = (int)$r['category_id'];
+    $rules[$c] = (isset($rules[$c]) ? $rules[$c] : 0) + 1;
+    if ($r['type'] === 'tags' && !array_diff(array_map('intval', explode(',', $r['value'])), $tag_ids))
+    {
+      $gone[$c] = (isset($gone[$c]) ? $gone[$c] : 0) + 1;
+    }
+  }
+  $ids = array();
+  foreach ($gone as $c => $n)
+  {
+    if ($n === $rules[$c]) { $ids[] = $c; }
+  }
+  if (empty($ids))
+  {
+    return array();
+  }
+
+  // noms complets : chaque album et ses parents
+  $cats = query2array('SELECT id, name, uppercats FROM ' . CATEGORIES_TABLE . ' WHERE id IN (' . implode(',', $ids) . ');', 'id');
+  $all = array();
+  foreach ($cats as $c) { $all = array_merge($all, explode(',', $c['uppercats'])); }
+  $names = query2array('SELECT id, name FROM ' . CATEGORIES_TABLE . ' WHERE id IN (' . implode(',', array_map('intval', array_unique($all))) . ');', 'id', 'name');
+  $out = array();
+  foreach ($ids as $id)
+  {
+    if (!isset($cats[$id])) { continue; }
+    $parts = array();
+    foreach (explode(',', $cats[$id]['uppercats']) as $u)
+    {
+      if (isset($names[$u])) { $parts[] = strip_tags($names[$u]); }
+    }
+    $out[$id] = implode(' / ', $parts);
+  }
+  return $out;
+}
+
+/**
+ * Vide des SmartAlbums restés sans critère : plus de filtres (l'album n'est plus un SmartAlbum) ni de photos
+ * associées automatiquement ; les photos rangées à la main restent. Comme la case « Cet album est un
+ * SmartAlbum » décochée dans SmartAlbums. Appelée depuis la finalisation (admin/include/functions.php chargé).
+ */
+function tagmanager_smart_empty(array $cat_ids)
+{
+  $cat_ids = array_values(array_unique(array_map('intval', $cat_ids)));
+  if (empty($cat_ids) || !defined('CATEGORY_FILTERS_TABLE'))
+  {
+    return;
+  }
+  $in = implode(',', $cat_ids);
+  // colonne ENUM('true','false') de SmartAlbums : comparer au texte
+  pwg_query('DELETE FROM ' . IMAGE_CATEGORY_TABLE . ' WHERE category_id IN (' . $in . ') AND smart = \'true\';');
+  pwg_query('DELETE FROM ' . CATEGORY_FILTERS_TABLE . ' WHERE category_id IN (' . $in . ');');
+  set_random_representant($cat_ids);
 }
 
 // ---------------------------------------------------------------------------------------------

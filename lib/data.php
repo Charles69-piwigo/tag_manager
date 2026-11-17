@@ -188,15 +188,15 @@ function tagmanager_sql_not_face($tag_col)
  * Seulement les fichiers JPEG. Webmestres : aucune autre restriction. Les autres utilisateurs ne voient et ne modifient
  * que les photos qu'ils pourraient voir dans la galerie.
  */
-function tagmanager_visible_sql($alias = 'i')
+function tagmanager_visible_sql($alias = 'i', $jpeg_only = true)
 {
   global $user;
   // seuls les JPEG portent des métadonnées XMP/IPTC écrites par le moteur : PNG, vidéos, etc. sont exclus
   // pour tout le monde (ils se taguent par la méthode standard de Piwigo)
-  $conds = array('LOWER(' . $alias . '.path) REGEXP \'[.]jpe?g$\'');
+  $conds = $jpeg_only ? array('LOWER(' . $alias . '.path) REGEXP \'[.]jpe?g$\'') : array();
   if (is_webmaster())
   {
-    return $conds[0];
+    return $jpeg_only ? $conds[0] : '';
   }
   if (!empty($user['forbidden_categories']))
   {
@@ -318,6 +318,9 @@ function tagmanager_smart_refresh($cat_id, $apply)
     return array('ok' => false, 'error' => tagmanager_t('Ce SmartAlbum n\'a aucun critère : sa mise à jour y rangerait presque toute la galerie. Corrigez d\'abord ses critères dans SmartAlbums.'));
   }
   @set_time_limit(120);
+  // set_random_representant() (appelée par smart_make_associations) et invalidate_user_cache() sont des
+  // fonctions de l'administration, absentes de la page publique (page.php)
+  include_once(PHPWG_ROOT_PATH . 'admin/include/functions.php');
 
   // colonne ENUM('true','false') de SmartAlbums : comparer au texte (« smart = false » ne trouve aucune ligne)
   $before = array_map('intval', query2array('SELECT image_id FROM ' . IMAGE_CATEGORY_TABLE . ' WHERE category_id = ' . $cat_id . ' AND smart = \'true\';', null, 'image_id'));
