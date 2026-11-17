@@ -3,7 +3,7 @@
 Plugin Name: tag_manager
 Version: auto
 Description: Gestionnaire de tags hiérarchiques (digiKam) : étiqueter les photos et réorganiser l'arbre des tags, en écrivant dans les métadonnées des fichiers
-Plugin URI: auto
+Plugin URI: https://piwigo.org/ext/extension_view.php?eid=1134
 Author: Charles69
 Has Settings: webmaster
 */
