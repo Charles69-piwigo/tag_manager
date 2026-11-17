@@ -359,6 +359,15 @@ function tagmanager_orphan_sql($alias = 'i')
   return 'NOT EXISTS (SELECT 1 FROM ' . IMAGE_CATEGORY_TABLE . ' tmo WHERE tmo.image_id = ' . $alias . '.id)';
 }
 
+/**
+ * Condition SQL « photo portant au moins un des tags $in » (liste d'identifiants entiers déjà validés)
+ * sur la table des images d'alias $alias.
+ */
+function tagmanager_tag_filter_sql($alias, $in)
+{
+  return 'EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' tmt WHERE tmt.image_id = ' . $alias . '.id AND tmt.tag_id IN (' . $in . '))';
+}
+
 function tagmanager_data_albums()
 {
   $vis = tagmanager_visible_sql('i');
@@ -542,8 +551,10 @@ function tagmanager_data_photos($mode, array $ids, $offset, $limit)
   }
   else
   {
-    $from = IMAGES_TABLE . ' i JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = i.id';
-    $where = 'it.tag_id IN (' . $in . ')';
+    // EXISTS et non JOIN : une photo de N tags du groupe ne donne qu'une ligne (avec les sous-niveaux d'un grand
+    // groupe, la jointure multipliait les lignes lues par tagmanager_home_albums et épuisait la mémoire de PHP)
+    $from = IMAGES_TABLE . ' i';
+    $where = tagmanager_tag_filter_sql('i', $in);
   }
 
   $vis = tagmanager_visible_sql('i');
@@ -641,7 +652,7 @@ function tagmanager_data_tag_albums(array $tag_ids)
   $visAnd = $vis === '' ? '' : ' AND ' . $vis;
 
   // chaque photo compte une fois, dans son album de rattachement (comme les bandeaux de la vue par tag)
-  $home = tagmanager_home_albums(IMAGES_TABLE . ' i JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = i.id', 'it.tag_id IN (' . $in . ')' . $visAnd);
+  $home = tagmanager_home_albums(IMAGES_TABLE . ' i', tagmanager_tag_filter_sql('i', $in) . $visAnd);
   $count = array();
   foreach ($home as $h)
   {

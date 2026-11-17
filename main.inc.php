@@ -11,6 +11,10 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.7a - 17/11/2026 - regroupe 1.7.1
+    corrigé : « Étiqueter › Tags » (clic sur l'onglet, « Inclure les sous-niveaux ») : erreur « <br… is not valid JSON » signalée par un utilisateur ; la vue par tag lisait une ligne par photo, par tag du groupe et par album, ce qui pouvait épuiser la mémoire de PHP sur une grande galerie (cause probable, non reproduite : photodev2 a memory_limit = 1024M) ; désormais une ligne par photo et par album (EXISTS), résultats identiques
+    modifié : une réponse du serveur qui n'est pas du JSON affiche le texte de l'erreur PHP (mémoire, délai…) au lieu de « not valid JSON »
+
 version 1.7 - 17/11/2026 - regroupe 1.6a.1 1.6a.2
     sécurité : seuls l'auteur d'un lot et les utilisateurs « Gérer : tout » peuvent l'annuler (un utilisateur « Étiqueter » pouvait interrompre un lot de structure d'un autre, fichiers réécrits sans mise à jour des tags Piwigo) ; la liste des fichiers en erreur d'un lot ne montre à un non-webmestre que les photos qu'il peut voir
     sécurité : jeton comparé par hash_equals ; index.php de redirection dans chaque dossier ; garde dans les fichiers de langue

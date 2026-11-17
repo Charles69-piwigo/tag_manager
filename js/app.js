@@ -40,7 +40,16 @@
       fd.append(k, (v !== null && typeof v === 'object') ? JSON.stringify(v) : v);
     });
     const r = await fetch(API, { method: 'POST', body: fd, credentials: 'same-origin' });
-    const j = await r.json();
+    const raw = await r.text();
+    let j;
+    try { j = JSON.parse(raw); } catch (_) {
+      // erreur PHP affichée en HTML (mémoire, délai…) : montrer son texte plutôt que « not valid JSON »
+      // DOMParser : document inerte (ni script ni image chargés)
+      const doc = new DOMParser().parseFromString(raw, 'text/html');
+      doc.querySelectorAll('script,style').forEach(n => n.remove());
+      const msg = (doc.body ? doc.body.textContent || '' : '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      throw new Error(tx('réponse du serveur non valide (HTTP ') + r.status + ') : ' + (msg || tx('vide')));
+    }
     if (j.stat !== 'ok') { throw new Error(j.message || tx('erreur')); }
     return j;
   }

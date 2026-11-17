@@ -284,6 +284,7 @@ $tm_js['Renommer'] = 'Rename';
 $tm_js['Renommer en…'] = 'Rename to…';
 $tm_js['Renommer le groupe'] = 'Rename group';
 $tm_js['Renommer le tag'] = 'Rename tag';
+$tm_js['réponse du serveur non valide (HTTP '] = 'invalid server response (HTTP ';
 $tm_js['Reprise du lot n° '] = 'Resuming batch #';
 $tm_js['Retirer des visages'] = 'Remove from faces';
 $tm_js['Saisissez un nom.'] = 'Enter a name.';
@@ -313,6 +314,7 @@ $tm_js['Tapez une partie du nom ou choisissez dans la liste'] = 'Type part of th
 $tm_js['terminé'] = 'finished';
 $tm_js['Tout sélectionner'] = 'Select all';
 $tm_js['Utilisateur'] = 'User';
+$tm_js['vide'] = 'empty';
 $tm_js['Voir l’aperçu'] = 'Preview';
 $tm_js['Webmestres'] = 'Webmasters';
 
