@@ -85,6 +85,7 @@ else
     'TM_LAST' => $summary['last'] ? date('d/m/Y H:i', $summary['last']) : '',
     'TM_TREE' => tagmanager_index_tree_html(),
     'TM_PROBLEMS' => tagmanager_index_problems(),
+    'TM_FACES' => tagmanager_index_faces(),
   ));
   $template->set_filename('tag_manager_index', dirname(__FILE__) . '/template/index.tpl');
   $template->assign_var_from_handle('ADMIN_CONTENT', 'tag_manager_index');

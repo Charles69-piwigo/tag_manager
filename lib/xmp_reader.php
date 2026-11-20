@@ -214,6 +214,168 @@ function tagmanager_parse_hierarchy($xmp)
   return $paths;
 }
 
+define('TAGMANAGER_NS_MWGRS', 'http://www.metadataworkinggroup.com/schemas/regions/');
+define('TAGMANAGER_NS_MPREG', 'http://ns.microsoft.com/photo/1.2/t/Region#');
+
+/**
+ * Noms des cadres de visage d'un paquet XMP, lus comme face_tag : régions MWG (digiKam, Lightroom,
+ * face_tag_editor ; nom en balise ou en attribut) et régions Microsoft (MPReg:PersonDisplayName).
+ * C'est la norme qui dit qu'un nom est une personne, quelle que soit la racine de hiérarchie
+ * (« Personnes », « People », « Persone »… selon la langue de digiKam).
+ * Les régions MWG de type BarCode ou Focus ne sont pas des visages.
+ *
+ * Un cadre n'est compté que s'il a une zone (MWG : mwg-rs:Area ; Microsoft : MPReg:Rectangle), comme face_tag :
+ * digiKam écrit aussi, pour une personne attribuée sans cadre, une entrée Microsoft avec le nom SEUL (cas réel,
+ * photo n° 214023 : « Rosine Chevalier » sans rectangle, à côté des cadres d'Alain, Annie et Charles). Ce n'est
+ * pas un cadre de visage.
+ *
+ * @return string[] noms distincts (orthographe du fichier), régions MWG puis Microsoft
+ */
+function tagmanager_parse_faces($xmp)
+{
+  $d = tagmanager_parse_faces_detail($xmp);
+  $out = $d['mwg'];
+  foreach ($d['mp'] as $m)
+  {
+    $in = false;
+    foreach ($out as $w)
+    {
+      if (strtolower($w) === strtolower($m)) { $in = true; break; }
+    }
+    if (!$in) { $out[] = $m; }
+  }
+  return $out;
+}
+
+/** L'élément de la région porte-t-il une zone (attribut ou élément enfant $local dans l'espace $ns) ? */
+function tagmanager_region_has($owner, $ns, $local)
+{
+  if (!($owner instanceof DOMElement))
+  {
+    return false;
+  }
+  if ($owner->hasAttributeNS($ns, $local))
+  {
+    return true;
+  }
+  foreach ($owner->childNodes as $c)
+  {
+    if ($c instanceof DOMElement && $c->namespaceURI === $ns && $c->localName === $local)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** @return array mwg => noms des régions MWG, mp => noms des régions Microsoft */
+function tagmanager_parse_faces_detail($xmp)
+{
+  if (strpos($xmp, 'regions/') === false && strpos($xmp, 'PersonDisplayName') === false)
+  {
+    return array('mwg' => array(), 'mp' => array()); // ni MWG ni Microsoft : rien à analyser
+  }
+  $dom = new DOMDocument();
+  $prev = libxml_use_internal_errors(true);
+  $ok = $dom->loadXML($xmp, LIBXML_NONET);
+  libxml_clear_errors();
+  libxml_use_internal_errors($prev);
+  if (!$ok)
+  {
+    return array('mwg' => array(), 'mp' => array());
+  }
+  $xp = new DOMXPath($dom);
+  $xp->registerNamespace('mwgrs', TAGMANAGER_NS_MWGRS);
+  $xp->registerNamespace('mp', TAGMANAGER_NS_MPREG);
+
+  $names = array();
+  $add = function ($v) use (&$names)
+  {
+    $v = trim($v);
+    if ($v !== '' && !in_array($v, $names, true))
+    {
+      $names[] = $v;
+    }
+  };
+  $mp = array();
+  $add_mp = function ($v) use (&$mp)
+  {
+    $v = trim($v);
+    if ($v !== '' && !in_array($v, $mp, true))
+    {
+      $mp[] = $v;
+    }
+  };
+
+  // MWG : <mwg-rs:Name>…</mwg-rs:Name> ou mwg-rs:Name="…", à côté du Type de la même région
+  foreach ($xp->query('//mwgrs:Name | //@mwgrs:Name') as $n)
+  {
+    $owner = ($n instanceof DOMAttr) ? $n->ownerElement : $n->parentNode;
+    $type = '';
+    if ($owner instanceof DOMElement)
+    {
+      if ($owner->hasAttributeNS(TAGMANAGER_NS_MWGRS, 'Type'))
+      {
+        $type = $owner->getAttributeNS(TAGMANAGER_NS_MWGRS, 'Type');
+      }
+      else
+      {
+        foreach ($owner->childNodes as $c)
+        {
+          if ($c instanceof DOMElement && $c->namespaceURI === TAGMANAGER_NS_MWGRS && $c->localName === 'Type')
+          {
+            $type = $c->textContent;
+            break;
+          }
+        }
+      }
+    }
+    if (in_array(strtolower(trim($type)), array('barcode', 'focus'), true))
+    {
+      continue;
+    }
+    if (!tagmanager_region_has($owner, TAGMANAGER_NS_MWGRS, 'Area'))
+    {
+      continue; // nom sans zone : pas un cadre
+    }
+    $add($n instanceof DOMAttr ? $n->value : $n->textContent);
+  }
+  foreach ($xp->query('//mp:PersonDisplayName | //@mp:PersonDisplayName') as $n)
+  {
+    $owner = ($n instanceof DOMAttr) ? $n->ownerElement : $n->parentNode;
+    if (!tagmanager_region_has($owner, TAGMANAGER_NS_MPREG, 'Rectangle'))
+    {
+      continue; // nom sans rectangle : personne attribuée sans cadre (digiKam), pas un cadre
+    }
+    $add_mp($n instanceof DOMAttr ? $n->value : $n->textContent);
+  }
+  return array('mwg' => $names, 'mp' => $mp);
+}
+
+/**
+ * Chemins ET noms des cadres de visage d'un fichier, en une seule lecture.
+ * @return array|null null si le fichier est illisible, sinon array('paths' => …, 'faces' => …)
+ */
+function tagmanager_read_hierarchy_faces($file)
+{
+  if (!is_file($file))
+  {
+    return null;
+  }
+  $probe = @fopen($file, 'rb');
+  if ($probe === false)
+  {
+    return null;
+  }
+  fclose($probe);
+  $xmp = tagmanager_read_xmp_packet($file);
+  if ($xmp === null)
+  {
+    return array('paths' => array(), 'faces' => array());
+  }
+  return array('paths' => tagmanager_parse_hierarchy($xmp), 'faces' => tagmanager_parse_faces($xmp));
+}
+
 /**
  * @return array|null null si le fichier est illisible, sinon la liste des chemins (éventuellement vide)
  */

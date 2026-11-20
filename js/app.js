@@ -610,7 +610,7 @@
     $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body" id="dbody">' +
       r.lines.map(l => '<div class="op"><b>' + esc(l) + '</b></div>').join('') +
       (r.warnings && r.warnings.length ? tx('<div style="border:1px solid var(--pend);border-radius:6px;padding:8px 10px;margin:6px 0"><b>À savoir avant d’appliquer</b><ul style="margin:4px 0 0 18px">') + r.warnings.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
-      tx('<div>Touche <b>') + r.files + '</b> photo' + (r.files > 1 ? 's' : '') + ' (' + r.tags + ' tag' + (r.tags > 1 ? 's' : '') + '). ' + (r.files ? tx('Chaque fichier est relu, modifié puis réécrit, sans toucher à l’image.') : tx('Aucun fichier à réécrire.')) + '</div>' +
+      tx('<div>Touche <b>') + r.files + '</b> photo' + (r.files > 1 ? 's' : '') + ' (' + r.tags + tx(' tag') + (r.tags > 1 ? 's' : '') + '). ' + (r.files ? tx('Chaque fichier est relu, modifié puis réécrit, sans toucher à l’image.') : tx('Aucun fichier à réécrire.')) + '</div>' +
       tx('<div style="color:var(--muted)">Les tags Piwigo ne sont modifiés qu’une fois <b>tous</b> les fichiers écrits. SmartAlbums suit les fusions et les suppressions par identifiant.</div>') +
       (r.files ? '<label class="chk"><input type="checkbox" id="orig"' + (S.original ? ' checked' : '') + tx('> Créer une copie <span class="mono">.original</span> si elle n’existe pas</label>') : '') +
       '<div class="prog" id="prog" hidden><div></div></div><div id="pmsg" style="color:var(--muted)" hidden></div></div>' +
@@ -631,7 +631,7 @@
     $('#layer').innerHTML = '<div class="veil" role="dialog" aria-modal="true"><div class="dlg"><h2>' + esc(title) + '</h2><div class="body" id="dbody">' +
       '<p style="margin:0">' + (all > 1 ? tx('Les ') + all + tx(' photos du tag ont été lues') : tx('La photo du tag a été lue')) + tx('. On y trouve deux usages du même nom :</p>') +
       tx('<table class="rc"><tr><th>Usage</th><th>Photos</th><th>Après séparation</th></tr>') +
-      row(tx('Personne'), p.person_path, nPers, tx('inchangé : reste « ') + esc(p.tag) + tx(' »')) +
+      row(tx('Personne'), p.person_path || tx('(cadre de visage, sans chemin)'), nPers, tx('inchangé : reste « ') + esc(p.tag) + tx(' »')) +
       row(tx('Tag ordinaire'), p.normal_path, nb, tx('<span class="chip n">devient</span> ') + esc(p.new_path.split('|').join(' › '))) + '</table>' +
       tx('<div style="background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 10px"><b>Ce qui sera fait</b><ul style="margin:4px 0 0 18px">') + items.map(x => '<li>' + x + '</li>').join('') + '</ul></div>' +
       (p.both ? '<div class="why">' + (p.both > 1 ? p.both + tx(' photos portent') : tx('1 photo porte')) + tx(' la personne et le tag ordinaire : ') + (p.both > 1 ? tx('elles gardent') : tx('elle garde')) + tx(' les deux tags.</div>') : '') +
@@ -850,7 +850,7 @@
       // groupe qui contient des tags : ils sont mis « à plat » (sans groupe), pas supprimés
       const n = leavesUnder(key).length;
       structDialog(tx('Supprimer le groupe « ') + name + tx(' » ?'),
-        tx('<div>Ce groupe contient <b>') + n + ' tag' + (n > 1 ? 's' : '') + tx('</b>. Aucun tag n’est supprimé : chacun reste attaché à ses photos, mais sans groupe (« à plat »).</div>') +
+        tx('<div>Ce groupe contient <b>') + n + tx(' tag') + (n > 1 ? 's' : '') + tx('</b>. Aucun tag n’est supprimé : chacun reste attaché à ses photos, mais sans groupe (« à plat »).</div>') +
         tx('<div style="color:var(--muted)">Les chemins qui passent par ce groupe sont retirés des fichiers ; chaque photo garde le mot-clé simple de ses tags. Les tags passent dans « (sans chemin) », d’où vous pourrez les ranger dans un autre groupe.</div>'),
         () => { structFocus = parent || null; return [{ type: 'flatten_group', group: key }]; }, tx('Voir l’aperçu'));
       return;
@@ -967,7 +967,7 @@
     const can = LEVEL() >= 3 ? '' : ' disabled';
     const head = tx('<tr><th>Tag dans Piwigo</th><th>Photos</th><th>Constat</th><th>Action</th><th>Cible</th><th></th></tr>');
     const rows = REC.map((r, i) => {
-      if (r.status === 'split' || r.status === 'unface') { return recSpecialRow(r, i, can); }
+      if (r.status === 'split' || r.status === 'unface' || r.status === 'facenone' || r.status === 'framenotag') { return recSpecialRow(r, i, can); }
       const badge = r.conf === 'haute' ? tx('<span class="status ok"><i class="icon-ok"></i>suggestion fiable</span>') : tx('<span class="status warn">à vérifier</span>');
       const opts = Object.keys(RACT).map(k => '<option value="' + k + '"' + (r.act === k ? ' selected' : '') + '>' + RACT[k] + '</option>').join('');
       const needs = r.act === 'merge' || r.act === 'rename' || r.act === 'place';
@@ -983,10 +983,24 @@
 
   /** Ligne « personne et tag ordinaire » (Séparer) ou « marqué visage à tort » (Ce n'est pas un visage). */
   function recSpecialRow(r, i, can) {
-    const cst = '<div style="margin-bottom:4px"><span class="status warn">' + esc(r.chip || '') + '</span></div><div>' + esc(r.why) + '</div>' +
+    // « visage sans cadre » : liens vers les photos concernées, sous la pastille (page de la photo dans l'administration)
+    // (et sur une ligne « marqué visage à tort » trouvée par le contrôle), avec les cadres que porte chaque photo
+    const ph = !r.photos ? '' : '<div class="rec-photos">' + r.photos.map(p =>
+      '<span><a href="' + (PUBLIC ? 'picture.php?/' : 'admin.php?page=photo-') + p.id + '" target="_blank" rel="noopener"><i class="icon-picture"></i> ' + esc(p.file) + '</a>' +
+      (p.note ? ' <span class="why">— ' + esc(p.note) + '</span>' : '') +
+      ((p.frames || []).length ? ' <span class="why">(' + tx('cadres : ') + p.frames.map(f => tx('« ') + esc(f) + tx(' »')).join(', ') + ')</span>' : '') + '</span>').join('') +
+      ((r.photos || []).length < r.n ? '<span class="why">…</span>' : '') + '</div>';
+    const cst = '<div style="margin-bottom:4px"><span class="status warn">' + esc(r.chip || '') + '</span></div>' + ph + '<div>' + esc(r.why) + '</div>' +
       (r.fix ? '<div class="why" style="margin-top:3px">' + esc(r.fix) + '</div>' : '');
     let act;
-    if (r.status === 'split') {
+    if (r.status === 'facenone') {
+      // aucun cadre à ce nom nulle part (cas « macareux ») : on propose aussi « Ce n'est pas un visage »
+      act = '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">' +
+        (r.unface ? '<button class="btn pend" data-runface="' + i + '"' + can + tx('>Ce n’est pas un visage…</button>') : '') +
+        '<button class="btn" data-rgo="' + i + '"' + can + tx('>Ignorer</button></div>');
+    } else if (r.act === 'none') {
+      act = '<span class="cnt">—</span>'; // personne à vérifier : corriger le réglage, puis réindexer
+    } else if (r.status === 'split') {
       act = '<label for="rec-nn' + i + tx('" class="why" style="display:block;margin-bottom:3px">Nouveau nom du tag ordinaire</label>') +
         '<div style="display:flex;gap:6px;align-items:center"><input type="text" id="rec-nn' + i + '" class="rec-tg" data-ri="' + i + '" value="' + esc(r.target || '') + '" style="flex:1;min-width:0">' +
         '<button class="btn pend" data-rgo="' + i + '"' + can + tx('>Séparer…</button></div>');
@@ -1023,6 +1037,14 @@
   function recApply(i) {
     const r = REC[i];
     if (r.act === 'unface') { recUnface(r); return; }
+    if (r.act === 'faceignore') {
+      api('face_ignore', { tag: r.id }).then(res => {
+        if (!res.ok) { toast(res.error); return; }
+        toast(tx('« ') + r.name + tx(' » : photos sans cadre ignorées'));
+        api('recon').then(x => { REC = x.rows; renderMng(); renderRec(); }).catch(() => {});
+      }).catch(e => toast(tx('Échec : ') + e.message));
+      return;
+    }
     if (r.act === 'split') {
       structFocus = null;
       structPreview(tx('Séparer « ') + r.name + tx(' » ?'), [{ type: 'split', tag: r.name, name: (r.target || '').trim() }]);
@@ -1042,12 +1064,49 @@
   }
 
   // ---------- rendu : Paramètres ----------
+  /**
+   * Racines trouvées dans les fichiers pour les noms qui ont un cadre de visage (d'après l'index), et
+   * avertissement si le champ n'en contient aucune. Recalculé à chaque frappe dans le champ.
+   */
+  function renderFaceRoots() {
+    const box = $('#set-face-roots');
+    if (!box) { return; }
+    const fr = S.face_roots || {};
+    const keys = Object.keys(fr);
+    if (!keys.length) {
+      box.className = 'help';
+      box.textContent = S.faces_indexed === false ? tx('Racines des personnes dans vos fichiers : inconnues tant que l’indexation n’a pas été relancée (onglet Index).') : '';
+      box.hidden = !box.textContent;
+      return;
+    }
+    const cur = (S.reserved || []).map(x => x.toLowerCase());
+    const list = keys.map(k => tx('« ') + esc(k) + ' » (' + fr[k] + (fr[k] > 1 ? tx(' tags') : tx(' tag')) + ')').join(', ');
+    const miss = !keys.some(k => cur.indexOf(k.toLowerCase()) >= 0);
+    box.hidden = false;
+    box.className = miss ? 'help tm-warn' : 'help';
+    box.innerHTML = tx('Racines des personnes trouvées dans vos fichiers (noms qui ont un cadre de visage) : ') + list + '.' +
+      (miss ? ' <b>' + tx('Aucune n’est dans le champ : ces personnes ne seraient pas reconnues comme telles dans les chemins.') + '</b>' : '');
+  }
+
+  /** Liste déroulante « Ajouter » : racines connues (fichiers, défaut, autres langues de digiKam) absentes du champ. */
+  function renderRootPick() {
+    const pick = $('#set-root-pick'), add = $('#set-root-add');
+    if (!pick) { return; }
+    const cur = (S.reserved || []).map(x => x.toLowerCase());
+    const fr = S.face_roots || {};
+    const opts = (S.known_roots || []).filter(r => cur.indexOf(r.toLowerCase()) < 0);
+    pick.innerHTML = opts.map(r => '<option value="' + esc(r) + '">' + esc(r) + (fr[r] ? ' (' + tx('dans vos fichiers') + ')' : '') + '</option>').join('');
+    pick.disabled = add.disabled = !opts.length;
+  }
+
   const LVL = [tx('Étiqueter'), tx('Gérer : créer'), tx('Gérer : tout')];
   function renderSet() {
     $('#set-orig').checked = !!S.original;
     $('#set-thumb').value = S.thumb || 'large';
     if (document.activeElement !== $('#set-tw')) { $('#set-tw').value = S.tw || 300; }
     if (document.activeElement !== $('#set-reserved')) { $('#set-reserved').value = (S.reserved || []).join(', '); }
+    renderFaceRoots();
+    renderRootPick();
     const head = tx('<tr><th>Qui</th><th>Type</th>') + LVL.map(l => '<th>' + l + '</th>').join('') + '<th></th></tr>';
     const locked = [tx('Webmestres')].map(w => '<tr><td><b>' + w + tx('</b></td><td>Rôle Piwigo</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked disabled></td><td><span class="cnt">toujours</span></td></tr>')).join('');
     const rows = S.rights.map((r, i) => '<tr><td><b>' + esc(r.who) + '</b></td><td>' + esc(tx(r.type)) + '</td>' + r.p.map((v, j) => '<td><input type="checkbox" class="rcb" data-ri="' + i + '" data-pi="' + j + '"' + (v ? ' checked' : '') + ' aria-label="' + esc(r.who + ' : ' + LVL[j]) + '"></td>').join('') + '<td><button class="btn" data-rdel="' + i + tx('" aria-label="Retirer ') + esc(r.who) + tx(' de la table">Retirer</button></td></tr>')).join('');
@@ -1160,6 +1219,7 @@
     if (tid === 'jretry') { resumeJob(parseInt(btn.getAttribute('data-job'), 10), parseInt(btn.getAttribute('data-total'), 10), true); return; }
     if ((x = g('[data-jretry]'))) { resumeJob(parseInt(x.getAttribute('data-jretry'), 10), parseInt(x.getAttribute('data-jtotal'), 10), true); return; }
     if ((x = g('[data-sop]'))) { if (!x.disabled) { runStructOp(x.getAttribute('data-sop'), mkey); } return; }
+    if ((x = g('[data-runface]'))) { recUnface(REC[parseInt(x.getAttribute('data-runface'), 10)]); return; }
     if ((x = g('[data-rgo]'))) { recApply(parseInt(x.getAttribute('data-rgo'), 10)); return; }
     if (tid === 'rec-bulk') { recBulk(); return; }
     if (tid === 'nt-go') { createFromPanel(); return; }
@@ -1278,7 +1338,14 @@
     if (e.target.id === 'mg-name' || e.target.id === 'mg-group') { e.preventDefault(); createGroupFromMng(); }
   });
   root.addEventListener('input', e => { const t = e.target; if (t.classList && t.classList.contains('rec-tg')) { REC[parseInt(t.getAttribute('data-ri'), 10)].target = t.value; } });
-  $('#set-reserved').addEventListener('input', e => { S.reserved = e.target.value.split(',').map(x => x.trim()).filter(Boolean); });
+  $('#set-reserved').addEventListener('input', e => { S.reserved = e.target.value.split(',').map(x => x.trim()).filter(Boolean); renderFaceRoots(); renderRootPick(); });
+  $('#set-root-add').addEventListener('click', () => {
+    const v = $('#set-root-pick').value;
+    if (!v) { return; }
+    S.reserved = (S.reserved || []).concat([v]); // ajouté au champ ; enregistré avec « Enregistrer », comme le reste
+    $('#set-reserved').value = S.reserved.join(', ');
+    renderFaceRoots(); renderRootPick();
+  });
   $('#pfilter').addEventListener('input', e => { pFilter = e.target.value; renderPanel(); });
   $('#tfilter').addEventListener('input', e => { tFilter[view.tab] = e.target.value; renderTree(); });
   $('#mfilter').addEventListener('input', e => { mFilter = e.target.value; renderMng(); });

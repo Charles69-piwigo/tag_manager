@@ -12,8 +12,15 @@
 #tm-app .itree li{line-height:1.7}
 #tm-app .itree .tm-group{font-weight:700;color:var(--strong)}
 #tm-app .itree .tm-group>ul{font-weight:400;color:var(--txt)}
-#tm-app .itree .tm-nb{display:inline-block;font-size:10.5px;font-weight:700;padding:0 6px;border-radius:9px;background:var(--grey-b);color:var(--grey-f);margin-left:4px}
+#tm-app .itree .tm-nb,#tm-app .flist .tm-nb{display:inline-block;font-size:10.5px;font-weight:700;padding:0 6px;border-radius:9px;background:var(--grey-b);color:var(--grey-f);margin-left:4px}
 #tm-app .plist li{display:block}
+#tm-app .tm-cols{display:flex;flex-wrap:wrap;gap:0 24px;align-items:flex-start}
+#tm-app .tm-cols>fieldset{flex:1 1 360px;min-width:0}
+#tm-app .flist{list-style:none;margin:0;padding:0}
+#tm-app .flist li{display:block;line-height:1.8}
+#tm-app .flist .fn{color:var(--strong)}
+#tm-app .flist .fs{font-size:11px;color:var(--muted,#777);margin-left:8px}
+#tm-app .flist .fs.warn{color:var(--warn-f);font-weight:600}
 </style>
 {/literal}
 
@@ -22,12 +29,12 @@
 </div>
 
 <div id="tm-app" class="tm-index{if $TM_DARK} dark{/if}">
-<div class="conf" id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}">
+<div class="conf" id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}" data-t-faces="{'contrôle des visages :'|@translate}" data-t-facenone="{'sans cadre'|@translate}">
 
   <fieldset>
     <legend><span class="ic blue"><i class="icon-chart-bar"></i></span>{'Index des chemins de tags'|@translate}</legend>
     <ul>
-      <li><p class="help" style="margin-top:0">{'Piwigo ne conserve que le dernier niveau des tags. L’index lit une photo par tag pour retrouver son chemin complet dans les fichiers (lecture seule : aucun fichier ni aucun tag n’est modifié).'|@translate}</p>
+      <li><p class="help" style="margin-top:0">{'Piwigo ne conserve que le dernier niveau des tags. L’index lit une photo par tag pour retrouver son chemin complet dans les fichiers (lecture seule : aucun fichier ni aucun tag n’est modifié).'|@translate} {'Il contrôle aussi chaque photo qui porte un tag de visage : la première fois toutes, ensuite seulement les nouvelles et celles dont Piwigo a resynchronisé les métadonnées.'|@translate}</p>
         <div class="stats">
           <div class="stat"><b>{$TM_SUMMARY.total_tags}</b>{'tags utilisés'|@translate}</div>
           <div class="stat"><b>{$TM_SUMMARY.ok}</b>{'avec chemin'|@translate}</div>
@@ -62,6 +69,7 @@
   </fieldset>
   {/if}
 
+  <div class="tm-cols">
   <fieldset>
     <legend><span class="ic green"><i class="icon-flow-tree"></i></span>{'Arbre indexé'|@translate}</legend>
     <ul><li style="display:block">
@@ -72,6 +80,29 @@
     {/if}
     </li></ul>
   </fieldset>
+
+  <fieldset>
+    <legend><span class="ic yellow"><i class="icon-user"></i></span>{'Visages'|@translate} ({$TM_FACES|@count})</legend>
+    <ul><li style="display:block">
+      <p class="help" style="margin-top:0">{'Tags de visage (liste de face_tag et noms qui ont un cadre de visage dans un fichier), avec le résultat du dernier contrôle des photos. Affichage seul : ils ne sont pas gérés par ce plugin.'|@translate}</p>
+    {if $TM_FACES}
+      <ul class="flist">
+      {foreach from=$TM_FACES item=f}
+        <li><span class="fn">{$f.name|escape}</span><span class="tm-nb" title="{'photos'|@translate}">{$f.total}</span>
+          {if $f.face}<span class="fs">{$f.face} {'avec cadre'|@translate}</span>{/if}
+          {if $f.path}<span class="fs">{$f.path} {'chemin sans cadre'|@translate}</span>{/if}
+          {if $f.none}<span class="fs warn">{$f.none} {'sans cadre'|@translate}</span>{/if}
+          {if $f.ignored}<span class="fs">{$f.ignored} {'ignorée(s)'|@translate}</span>{/if}
+          {if $f.other}<span class="fs">{$f.other} {'autre(s)'|@translate}</span>{/if}
+        </li>
+      {/foreach}
+      </ul>
+    {else}
+      <p class="help">{'Aucun tag de visage.'|@translate}</p>
+    {/if}
+    </li></ul>
+  </fieldset>
+  </div>
 </div>
 </div>
 
@@ -113,6 +144,21 @@
         bar.style.width = (s.total ? Math.min(100, 100 * done / s.total) : 100) + '%';
         msg.textContent = done + ' / ' + s.total + ' tags, ' + reads + ' ' + T('read');
         if (r.done) { break; }
+      }
+      // Contrôle des visages : seulement les photos nouvelles ou resynchronisées depuis le dernier contrôle
+      var tagMsg = msg.textContent;
+      var f = await post({ action: 'face_check_start' });
+      if (f.stat !== 'ok') { throw new Error(f.message || 'face_check_start'); }
+      var fdone = 0, fnone = 0;
+      bar.style.width = '0';
+      while (f.total > 0) {
+        var b = await post({ action: 'face_check_batch' });
+        if (b.stat !== 'ok') { throw new Error(b.message || 'face_check_batch'); }
+        fdone += b.processed;
+        fnone += b.none;
+        bar.style.width = Math.min(100, 100 * fdone / f.total) + '%';
+        msg.textContent = tagMsg + ' — ' + T('faces') + ' ' + fdone + ' / ' + f.total + (fnone ? ', ' + fnone + ' ' + T('facenone') : '');
+        if (b.done || !b.processed) { break; }
       }
       msg.textContent += ' — ' + T('done');
       setTimeout(function () { location.reload(); }, 800);

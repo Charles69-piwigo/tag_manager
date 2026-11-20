@@ -183,8 +183,8 @@ function tagmanager_acdsee_encode(array $paths)
 /** Racines réservées (tags de visages) : le moteur n'y touche JAMAIS. Valeur par défaut hors Piwigo (tests). */
 function tagmanager_engine_roots()
 {
-  $r = function_exists('tagmanager_reserved_roots') ? tagmanager_reserved_roots() : array('Personnes');
-  return is_array($r) && !empty($r) ? $r : array('Personnes');
+  $r = function_exists('tagmanager_reserved_roots') ? tagmanager_reserved_roots() : array('Personnes', 'People');
+  return is_array($r) && !empty($r) ? $r : array('Personnes', 'People');
 }
 
 /** Ce chemin (liste de segments) est-il sous une racine réservée ? */

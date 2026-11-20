@@ -133,13 +133,14 @@ define('TAGMANAGER_SPLIT_MAX', 500);
  * (chemin sous une racine réservée), comme tag ordinaire (autre chemin), les deux, ou aucun.
  * Sert à « Séparer » (aperçu exact) et à « Ce n'est pas un visage » (vérification).
  * @param int|null $max nombre de photos lues au plus (réparties sur la liste) ; null : toutes
- * @return array person, normal, both, none, unreadable (listes d'image_id), person_path, normal_path, total, read
+ * @return array person, normal, both, none, unreadable, face (photos avec un cadre de visage à ce nom) (listes
+ *               d'image_id), person_path, normal_path, total, read
  */
 function tagmanager_usage_scan($tag_id, $name, $max = null)
 {
   @set_time_limit(300);
   $ids = array_map('intval', query2array('SELECT image_id FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($tag_id) . ' ORDER BY image_id;', null, 'image_id'));
-  $out = array('person' => array(), 'normal' => array(), 'both' => array(), 'none' => array(), 'unreadable' => array(),
+  $out = array('person' => array(), 'normal' => array(), 'both' => array(), 'none' => array(), 'unreadable' => array(), 'face' => array(),
     'person_path' => null, 'normal_path' => null, 'total' => count($ids), 'read' => 0);
   $pick = $ids;
   if ($max !== null && count($ids) > $max)
@@ -154,13 +155,22 @@ function tagmanager_usage_scan($tag_id, $name, $max = null)
   {
     foreach (query2array('SELECT id, path FROM ' . IMAGES_TABLE . ' WHERE id IN (' . implode(',', $chunk) . ') ORDER BY id;') as $img)
     {
-      $paths = tagmanager_read_hierarchy(tagmanager_resolve_path($img['path']));
-      if ($paths === null)
+      $meta = tagmanager_read_hierarchy_faces(tagmanager_resolve_path($img['path']));
+      if ($meta === null)
       {
         $out['unreadable'][] = (int)$img['id'];
         continue;
       }
+      $paths = $meta['paths'];
       $out['read']++;
+      foreach ($meta['faces'] as $fn)
+      {
+        if (tagmanager_same_name($fn, $name))
+        {
+          $out['face'][] = (int)$img['id']; // cadre de visage à ce nom, quelle que soit la racine du chemin
+          break;
+        }
+      }
       $p_person = false;
       $p_normal = false;
       foreach ($paths as $p)
@@ -179,6 +189,10 @@ function tagmanager_usage_scan($tag_id, $name, $max = null)
           $p_normal = true;
           if ($out['normal_path'] === null) { $out['normal_path'] = implode('|', $p); }
         }
+      }
+      if (!$p_person && !$p_normal && !empty($out['face']) && end($out['face']) === (int)$img['id'])
+      {
+        $p_person = true; // cadre de visage sans aucun chemin à ce nom (Lightroom, face_tag_editor) : c'est la personne
       }
       $out[$p_person ? ($p_normal ? 'both' : 'person') : ($p_normal ? 'normal' : 'none')][] = (int)$img['id'];
     }
@@ -441,6 +455,10 @@ function tagmanager_struct_plan(array $ops)
         }
         $moved = array_merge($scan['normal'], $scan['both']);
         if (empty($moved)) { $err(tagmanager_t('Aucune photo ne porte « %s » comme tag ordinaire : rien à séparer.', $tname)); break; }
+        // Cadre de visage à ce nom sur une photo dont aucun chemin n'est sous une racine réservée : le chemin de la
+        // personne serait pris pour le tag ordinaire et renommé (ex. People|Paul quand « People » n'est pas réservé).
+        $face_unrooted = array_intersect($scan['face'], $scan['normal']);
+        if (!empty($face_unrooted)) { $err(tagmanager_t('%s photo(s) ont un cadre de visage « %s » mais aucun chemin sous les racines réservées (Paramètres › Tags de visages) : impossible de savoir quel chemin est la personne. Ajoutez sa racine dans les Paramètres.', count($face_unrooted), $tname)); break; }
         if (empty($scan['person']) && empty($scan['both'])) { $err(tagmanager_t('Aucune photo ne porte « %s » comme personne : utilisez plutôt « Renommer ».', $tname)); break; }
         $npath = $scan['normal_path'] !== null ? $scan['normal_path'] : ($t['ok'] ? $t['path'] : $tname);
         $to = array_merge(array_slice(explode('|', $npath), 0, -1), array($new));
@@ -752,6 +770,15 @@ function tagmanager_job_finalize($job_id)
         }
         tagmanager_upsert_path($nid, $f['path']);
         if (!empty($f['person_path'])) { tagmanager_upsert_path($src, $f['person_path']); }
+        else
+        {
+          // personne connue seulement par ses cadres de visage (aucun chemin) : le tag n'a plus de chemin ordinaire
+          pwg_query('
+INSERT INTO ' . TAGMANAGER_PATHS_TABLE . ' (kind, tag_id, path, sample_image_id, status, indexed_at)
+SELECT \'tag\', id, name, NULL, \'flat\', ' . time() . ' FROM ' . TAGS_TABLE . ' WHERE id = ' . $src . '
+ON DUPLICATE KEY UPDATE path = VALUES(path), status = \'flat\', indexed_at = VALUES(indexed_at)
+;');
+        }
         tagmanager_ensure_homonym_table();
         pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' WHERE tag_id = ' . $src . ';');
         break;

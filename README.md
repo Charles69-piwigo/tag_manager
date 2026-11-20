@@ -17,15 +17,19 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 - **Étiqueter** : navigation par albums (ceux de la galerie, dans l'ordre de « Gestion des albums », que les photos viennent de la synchronisation ou d'un envoi par upload ; « Photos orphelines » pour les webmestres) ou par tags, miniatures paginées, sélection multiple, glisser-déposer d'une photo sur un tag, création d'un tag à la volée. Les changements restent dans une file locale jusqu'à « Aperçu et appliquer ». Par tag, les photos sont regroupées par album, avec un bandeau qui indique l'album. Au survol d'un album ou d'un tag, l'icône ↗ ouvre sa page dans la galerie (nouvel onglet). Un champ de filtre au-dessus de chaque arbre (sans casse ni accents) ouvre les branches qui contiennent le texte cherché.
 - **Gérer les tags** : arbre des tags avec renommer, fusionner, supprimer, ranger / déplacer un tag ; renommer / déplacer un groupe ; supprimer un groupe (s'il contient des tags, ils sont mis « à plat », sans groupe, et restent sur leurs photos). Sous la fiche, deux panneaux « Créer un tag » et « Créer un groupe » (un groupe peut être créé au premier niveau). Chaque opération passe par un aperçu chiffré calculé par le serveur.
 - **Tags sans photo** : les tags créés dans Piwigo et attachés à aucune photo apparaissent dans un regroupement « (sans photo) ». On peut les ranger, renommer, fusionner ou supprimer ; au premier ajout à des photos, leur groupe est demandé.
-- **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier. Deux cas liés aux visages ont leur propre ligne, en langage courant :
-  - un même nom pour une personne et un tag ordinaire : **Séparer** donne un autre nom au tag ordinaire (fichiers et Piwigo), la personne garde le sien ;
-  - un tag marqué comme visage par face_tag alors que ses photos le rangent ailleurs (cadre de visage supprimé) : **Ce n'est pas un visage** le retire de la liste des visages, après relecture des fichiers.
+- **À réconcilier** : propose fusion ou renommage pour les tags de Piwigo dont le chemin ne se retrouve dans aucun fichier. Les cas liés aux visages ont leur propre ligne, en langage courant, avec des liens vers les photos concernées :
+  - **personne et tag ordinaire** (un même nom pour les deux, Piwigo n'ayant qu'un tag par nom) : **Séparer** donne un autre nom au tag ordinaire (fichiers et Piwigo), la personne garde le sien ;
+  - **personne à vérifier** : un nom de cadre de visage que les fichiers rangent aussi sous un chemin ordinaire ;
+  - **marqué visage à tort** : un tag de la liste des visages de face_tag alors que ses photos le rangent ailleurs : **Ce n'est pas un visage** le retire de la liste, après relecture des fichiers ;
+  - **visage sans cadre** : un tag de visage sur une photo qui n'a pas de cadre à ce nom (seulement le chemin de personne, ou rien dans le fichier, par exemple un tag ajouté avec l'éditeur de Piwigo) : **Ignorer** si c'est bien la personne ;
+  - **cadre sans tag** / **cadre non rattaché** : un cadre de visage dont le nom n'a pas de tag dans Piwigo, ou dont le tag n'est pas sur la photo, avec le nom proche s'il existe (faute de frappe).
+- **Contrôle des visages** : l'indexation relit chaque photo qui porte un tag de visage (toutes la première fois, ensuite seulement les nouvelles et celles modifiées dans Piwigo, par exemple après une synchronisation des métadonnées). L'onglet Index affiche, à côté de l'arbre indexé, la liste des visages avec le résultat de ce contrôle.
 - **Arbres** : le clic droit déplie ou replie la ligne cliquée et tous ses sous-niveaux, ou tout l'arbre.
 - **Moteur d'écriture sans recompression** : seuls les segments XMP (APP1), IPTC (APP13) et Exif (APP1, uniquement le champ XPKeywords) sont réécrits ; les pixels et les autres segments sont recopiés à l'identique. Vérification avant écriture, fichier temporaire puis renommage, copie `.original` facultative, aucune écriture si rien ne change.
 - **File d'attente reprenable** : les lots sont enregistrés en base, exécutés par paquets, avec journal et reprise après interruption (100 derniers lots conservés).
 - **Droits par groupe Piwigo** (voir ci-dessous) et page dédiée pour les non-webmestres.
 - **Interface en français et en anglais** (selon la langue de l'utilisateur dans Piwigo).
-- Les **tags de visages** (racine `Personnes`, gérés par `face_tag_editor` ou digiKam) ne sont jamais affichés ni modifiés.
+- Les **tags de visages** (gérés par `face_tag_editor` ou digiKam) ne sont jamais affichés ni modifiés. Une personne est reconnue par son **cadre de visage** dans le fichier (régions MWG ou Microsoft avec une zone, comme face_tag), par la liste des visages de face_tag si elle existe, ou par la **racine** de son chemin. Cette racine dépend de la langue de digiKam : **Paramètres › Tags de visages** propose par défaut `Personnes, People, Personen, Persone, Personas` (variable `$conf['tag_manager_person_roots']`, modifiable dans la configuration locale), une liste déroulante pour ajouter les autres langues, et affiche les racines trouvées dans vos fichiers. Fonctionne aussi sans face_tag.
 
 ### Limites
 
@@ -38,7 +42,7 @@ digiKam range les tags en hiérarchie (`ALBUM|2024 NORVEGE|Fjords`). Piwigo, lui
 
 1. Copier le dossier `tag_manager` dans `plugins/` (le nom du dossier doit rester `tag_manager`).
 2. Activer le plugin dans **Administration > Plugins**.
-3. Ouvrir **Plugins > tag_manager**, onglet **Index** : lancer l'indexation (lecture des chemins hiérarchiques dans les fichiers). Relancer l'indexation après des changements faits depuis digiKam.
+3. Ouvrir **Plugins > tag_manager**, onglet **Index** : lancer l'indexation (lecture des chemins hiérarchiques dans les fichiers). Relancer l'indexation après des changements faits depuis digiKam. La première indexation relit en plus toutes les photos qui portent un tag de visage (quelques minutes pour quelques milliers de photos) ; les suivantes ne relisent que ce qui a changé.
 4. Onglets **Étiqueter** et **Gérer les tags** : l'interface complète. Réglages dans **Paramètres**.
 
 **Sauvegardez vos photos avant un premier essai réel.** Le plugin réécrit les fichiers. L'option « Créer une copie `.original` » (désactivée par défaut) conserve l'original à côté.
@@ -73,15 +77,19 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 - **Tag photos**: browse by albums (the gallery's albums, in the « Manage albums » order, whether photos come from synchronization or upload; « Orphan photos » for webmasters) or by tags, paginated thumbnails, multiple selection, drag a photo onto a tag, create a tag on the fly. Changes stay in a local queue until you click "Preview and apply". When browsing by tag, photos are grouped by album, each group with a banner naming the album. Hovering an album or a tag shows a ↗ icon that opens its gallery page in a new tab. A filter box above each tree (case and accent insensitive) opens the branches that contain the searched text.
 - **Manage tags**: tag tree with rename, merge, delete, move a tag; rename / move a group; delete a group (if it contains tags, they are made “flat”, without a group, and stay on their photos). Below the details pane, two side-by-side boxes "Create a tag" and "Create a group" (a group can be created at the top level). Every operation goes through a server-computed preview with counts.
 - **Tags without photos**: tags created in Piwigo and attached to no photo appear under a “(no photo)” grouping. They can be placed, renamed, merged or deleted; when first added to photos, their group is asked for.
-- **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file. Two face-related cases get their own plain-language line:
-  - the same name used for a person and for an ordinary tag: **Separate** gives the ordinary tag another name (files and Piwigo), the person keeps theirs;
-  - a tag marked as a face by face_tag although its photos file it elsewhere (face frame removed): **Not a face** removes it from the face list, after re-reading the files.
+- **To reconcile**: suggests a merge or rename for Piwigo tags whose path cannot be found in any file. Face-related cases get their own plain-language line, with links to the photos concerned:
+  - **person and ordinary tag** (the same name for both, Piwigo having only one tag per name): **Separate** gives the ordinary tag another name (files and Piwigo), the person keeps theirs;
+  - **person to check**: a face region name that the files also file under an ordinary path;
+  - **wrongly marked as a face**: a tag in face_tag's face list whose photos file it elsewhere: **Not a face** removes it from the list, after re-reading the files;
+  - **face without region**: a face tag on a photo that has no region with that name (only the person path, or nothing in the file, e.g. a tag added with Piwigo's editor): **Ignore** if it really is the person;
+  - **region without tag** / **region not attached**: a face region whose name has no tag in Piwigo, or whose tag is not on the photo, with the closest existing name (typo).
+- **Face check**: indexing re-reads every photo that carries a face tag (all of them the first time, then only new ones and those changed in Piwigo, e.g. after a metadata synchronization). The Index tab lists the faces next to the indexed tree, with the result of this check.
 - **Trees**: right-click expands or collapses the clicked line with all its sub-levels, or the whole tree.
 - **Lossless write engine**: only the XMP (APP1), IPTC (APP13) and Exif (APP1, XPKeywords field only) segments are rewritten; pixels and all other segments are copied unchanged. Verified before writing, temporary file then rename, optional `.original` copy, nothing written when nothing changes.
 - **Resumable queue**: batches are stored in the database, run in chunks, with a log and recovery after an interruption (last 100 batches kept).
 - **Rights per Piwigo group** (see below) and a dedicated page for non-webmasters.
 - **French and English interface** (following the user's language in Piwigo).
-- **Face tags** (root `Personnes`, handled by `face_tag_editor` or digiKam) are never shown nor modified.
+- **Face tags** (handled by `face_tag_editor` or digiKam) are never shown nor modified. A person is recognized by its **face region** in the file (MWG or Microsoft regions with an area, as face_tag does), by face_tag's face list when it exists, or by the **root** of its path. That root depends on digiKam's language: **Settings › Face tags** offers `Personnes, People, Personen, Persone, Personas` by default (variable `$conf['tag_manager_person_roots']`, can be changed in the local configuration), a drop-down list to add other languages, and shows the roots found in your files. Also works without face_tag.
 
 ### Limitations
 
@@ -94,7 +102,7 @@ digiKam stores tags as a hierarchy (`ALBUM|2024 NORWAY|Fjords`). Piwigo only kee
 
 1. Copy the `tag_manager` folder into `plugins/` (the folder name must stay `tag_manager`).
 2. Activate the plugin in **Administration > Plugins**.
-3. Open **Plugins > tag_manager**, **Index** tab: run the indexing (reads hierarchical paths from the files). Run it again after changes made from digiKam.
+3. Open **Plugins > tag_manager**, **Index** tab: run the indexing (reads hierarchical paths from the files). Run it again after changes made from digiKam. The first indexing also re-reads every photo that carries a face tag (a few minutes for a few thousand photos); later runs only re-read what changed.
 4. **Tagging** and **Manage tags** tabs: the full interface. Options are in **Settings**.
 
 **Back up your photos before a first real run.** The plugin rewrites files. The "Create a `.original` copy" option (off by default) keeps the original next to it.

@@ -79,6 +79,18 @@ function tagmanager_ajax($public)
         isset($_POST['run']) ? intval($_POST['run']) : time()
       ));
 
+    case 'face_check_start':
+      $admin_only();
+      $reply(tagmanager_face_check_start());
+
+    case 'face_check_batch':
+      $admin_only();
+      $reply(tagmanager_face_check_batch());
+
+    case 'face_ignore':
+      $need(3);
+      $reply(tagmanager_face_ignore(isset($_POST['tag']) ? $_POST['tag'] : 0));
+
     // --- lectures pour l'interface ---
     case 'albums':
       $need(1);
@@ -194,6 +206,10 @@ function tagmanager_ajax($public)
       $admin_only();
       // Piwigo ajoute des antislashs à toutes les valeurs reçues en POST : à retirer avant json_decode
       $saved = tagmanager_settings_save(isset($_POST['settings']) ? json_decode(stripslashes($_POST['settings']), true) : null);
+      if (isset($saved['error']))
+      {
+        $fail($saved['error']);
+      }
       $reply(array('saved' => $saved));
   }
 

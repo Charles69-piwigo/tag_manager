@@ -45,6 +45,59 @@ function tagmanager_face_registry_ids()
 }
 
 /**
+ * Tags dont le nom est celui d'un cadre de visage dans au moins un fichier lu par l'indexation
+ * (table tag_manager_faces, absente avant la première indexation de la version 1.7a.1) : tag_id => true.
+ */
+function tagmanager_face_seen_ids()
+{
+  static $ids = null;
+  if ($ids !== null)
+  {
+    return $ids;
+  }
+  $ids = array();
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FACES_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) > 0)
+  {
+    foreach (query2array('SELECT tag_id FROM `' . TAGMANAGER_FACES_TABLE . '`;', null, 'tag_id') as $id)
+    {
+      $ids[(int)$id] = true;
+    }
+  }
+  return $ids;
+}
+
+/**
+ * Racines de hiérarchie sous lesquelles les fichiers rangent les noms qui ont un cadre de visage
+ * (d'après l'index) : racine => nombre de tags, du plus fréquent au moins fréquent. Sert à l'écran
+ * Paramètres pour proposer la bonne racine (« Personnes », « People »…) et avertir si le réglage n'en
+ * contient aucune.
+ */
+function tagmanager_face_roots()
+{
+  $seen = tagmanager_face_seen_ids();
+  if (empty($seen))
+  {
+    return array();
+  }
+  $out = array();
+  foreach (query2array('
+SELECT path FROM ' . TAGMANAGER_PATHS_TABLE . '
+  WHERE kind = \'tag\' AND status = \'ok\' AND tag_id IN (' . implode(',', array_keys($seen)) . ')
+;', null, 'path') as $p)
+  {
+    $segs = explode('|', $p);
+    if (count($segs) < 2)
+    {
+      continue; // tag à plat : pas de racine
+    }
+    $out[$segs[0]] = isset($out[$segs[0]]) ? $out[$segs[0]] + 1 : 1;
+  }
+  arsort($out);
+  return $out;
+}
+
+/**
  * Tags inscrits comme visages dans le registre de face_tag mais que les fichiers rangent sous une racine
  * normale (chemin indexé « ok » hors racines réservées) : tag_id => chemin.
  * Cas réel : un cadre de visage « Arak » dessiné sur un chien puis supprimé ; face_tag / face_tag_editor
@@ -65,11 +118,16 @@ function tagmanager_face_registry_overridden()
     return $over;
   }
   $roots = tagmanager_reserved_roots();
+  $seen = tagmanager_face_seen_ids();
   foreach (query2array('
 SELECT tag_id, path FROM ' . TAGMANAGER_PATHS_TABLE . '
   WHERE kind = \'tag\' AND status = \'ok\' AND tag_id IN (' . implode(',', $ids) . ')
 ;') as $r)
   {
+    if (isset($seen[(int)$r['tag_id']]))
+    {
+      continue; // un fichier lu a un cadre de visage à ce nom : c'est bien une personne, quelle que soit sa racine
+    }
     $reserved = false;
     foreach ($roots as $root)
     {
@@ -87,7 +145,15 @@ SELECT tag_id, path FROM ' . TAGMANAGER_PATHS_TABLE . '
   return $over;
 }
 
-/** Tags de visage effectifs : registre de face_tag, moins les tags que les fichiers rangent ailleurs. */
+/**
+ * Tags de visage effectifs (cachés et protégés) :
+ *  - registre de face_tag, moins les tags que les fichiers rangent ailleurs (tagmanager_face_registry_overridden) ;
+ *  - plus les noms vus en cadre de visage dans un fichier (sert aussi sans face_tag), SAUF :
+ *    les homonymes connus (table des homonymes : personne ET tag ordinaire, ex. « Pic »), et ceux dont le chemin
+ *    indexé est un chemin ordinaire (hors racines réservées) : personne sous une racine non réservée (People|…)
+ *    ou homonyme non encore repéré ; ils restent visibles et sont signalés dans « À réconcilier »
+ *    (tagmanager_face_unrooted_ids()).
+ */
 function tagmanager_face_tag_ids()
 {
   static $ids = null;
@@ -96,8 +162,86 @@ function tagmanager_face_tag_ids()
     return $ids;
   }
   $over = tagmanager_face_registry_overridden();
-  $ids = array_values(array_filter(tagmanager_face_registry_ids(), function ($id) use ($over) { return !isset($over[$id]); }));
+  $set = array();
+  foreach (tagmanager_face_registry_ids() as $id)
+  {
+    if (!isset($over[$id]))
+    {
+      $set[$id] = true;
+    }
+  }
+  $unrooted = tagmanager_face_unrooted_ids();
+  $homonyms = tagmanager_homonym_ids();
+  foreach (tagmanager_face_seen_ids() as $id => $x)
+  {
+    if (!isset($set[$id]) && !isset($unrooted[$id]) && !isset($homonyms[$id]))
+    {
+      $set[$id] = true;
+    }
+  }
+  $ids = array_keys($set);
   return $ids;
+}
+
+/** Tags enregistrés comme homonymes (personne et tag ordinaire) par l'indexation : tag_id => true. */
+function tagmanager_homonym_ids()
+{
+  static $ids = null;
+  if ($ids !== null)
+  {
+    return $ids;
+  }
+  $ids = array();
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_HOMONYMS_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) > 0)
+  {
+    foreach (query2array('SELECT tag_id FROM `' . TAGMANAGER_HOMONYMS_TABLE . '`;', null, 'tag_id') as $id)
+    {
+      $ids[(int)$id] = true;
+    }
+  }
+  return $ids;
+}
+
+/**
+ * Noms vus en cadre de visage, absents du registre de face_tag, dont le chemin indexé est ordinaire (hors
+ * racines réservées) : tag_id => chemin. Personne rangée sous une racine non réservée, ou homonyme.
+ */
+function tagmanager_face_unrooted_ids()
+{
+  static $out = null;
+  if ($out !== null)
+  {
+    return $out;
+  }
+  $out = array();
+  $seen = tagmanager_face_seen_ids();
+  if (empty($seen))
+  {
+    return $out;
+  }
+  $registry = array_flip(tagmanager_face_registry_ids());
+  $roots = tagmanager_reserved_roots();
+  foreach (query2array('
+SELECT tag_id, path FROM ' . TAGMANAGER_PATHS_TABLE . '
+  WHERE kind = \'tag\' AND status = \'ok\' AND tag_id IN (' . implode(',', array_keys($seen)) . ')
+;') as $r)
+  {
+    if (isset($registry[(int)$r['tag_id']]))
+    {
+      continue; // registre ET cadre : c'est une personne (voir tagmanager_face_registry_overridden)
+    }
+    $reserved = false;
+    foreach ($roots as $root)
+    {
+      if ($r['path'] === $root || strpos($r['path'], $root . '|') === 0) { $reserved = true; break; }
+    }
+    if (!$reserved)
+    {
+      $out[(int)$r['tag_id']] = $r['path'];
+    }
+  }
+  return $out;
 }
 
 /**
@@ -818,12 +962,49 @@ SELECT t.id, t.name, h.person_path, p.path,
       continue;
     }
     $homonyms[(int)$h['id']] = true;
-    $where = ($h['path'] && !tagmanager_is_reserved_root($h['path'])) ? ' (' . str_replace('|', ' › ', implode('|', array_slice(explode('|', $h['path']), 0, -1))) . ')' : '';
+    if (strpos($h['person_path'], '*') === 0)
+    {
+      // Cadre de visage à ce nom et plusieurs chemins, aucun sous une racine réservée (voir l'indexeur)
+      $cands = array_map(function ($p) { return str_replace('|', ' › ', $p); }, explode("\t", substr($h['person_path'], 1)));
+      $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'split',
+        'chip' => tagmanager_t('personne à vérifier'),
+        'why' => tagmanager_t('« %s » a un cadre de visage (c\'est une personne) et plusieurs chemins : %s. Aucun n\'est sous une racine réservée (%s) : le plugin ne sait pas lequel est la personne.', $h['name'], implode(' ; ', $cands), implode(', ', tagmanager_reserved_roots())),
+        'fix' => tagmanager_t('Solution : ajouter la racine des personnes dans Paramètres › Tags de visages, puis relancer l\'indexation.'),
+        'act' => 'none', 'target' => '', 'conf' => 'faible');
+      continue;
+    }
+    $where =($h['path'] && !tagmanager_is_reserved_root($h['path'])) ? ' (' . str_replace('|', ' › ', implode('|', array_slice(explode('|', $h['path']), 0, -1))) . ')' : '';
     $out[] = array('id' => (int)$h['id'], 'name' => $h['name'], 'n' => (int)$h['n'], 'status' => 'split',
       'chip' => tagmanager_t('personne et tag ordinaire'),
       'why' => tagmanager_t('« %s » sert à deux choses : c\'est le nom d\'une personne (cadre de visage) et un tag ordinaire%s. Piwigo n\'a qu\'un seul tag pour les deux et ne peut pas les distinguer.', $h['name'], $where),
       'fix' => tagmanager_t('Solution : donner un autre nom au tag ordinaire. La personne garde le nom « %s ».', $h['name']),
       'act' => 'split', 'target' => $h['name'] . ' (tag)', 'conf' => 'faible');
+  }
+
+  // Nom vu en cadre de visage (hors liste de face_tag) mais rangé sous un chemin ordinaire : homonyme pas encore
+  // repéré (cadre « Bretagne » et ALBUM|Bretagne) ou personne sous une racine non réservée (People|Paul).
+  // Le tag reste visible (non protégé) tant que ce n'est pas tranché.
+  $unrooted = array_diff_key(tagmanager_face_unrooted_ids(), $homonyms);
+  if (!empty($unrooted))
+  {
+    foreach (query2array('
+SELECT t.id, t.name, f.sample_image_id, i.file,
+       (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id) AS n
+  FROM ' . TAGS_TABLE . ' t
+    JOIN ' . TAGMANAGER_FACES_TABLE . ' f ON f.tag_id = t.id
+    LEFT JOIN ' . IMAGES_TABLE . ' i ON i.id = f.sample_image_id
+  WHERE t.id IN (' . implode(',', array_keys($unrooted)) . ')
+  ORDER BY t.name
+;') as $u)
+    {
+      $p = $unrooted[(int)$u['id']];
+      $out[] = array('id' => (int)$u['id'], 'name' => $u['name'], 'n' => (int)$u['n'], 'status' => 'split',
+        'chip' => tagmanager_t('personne à vérifier'),
+        'why' => tagmanager_t('« %s » est le nom d\'un cadre de visage, mais les fichiers le rangent aussi sous un chemin ordinaire : %s. Soit c\'est un même nom pour une personne et un tag ordinaire (Piwigo n\'a qu\'un tag pour les deux), soit la racine des personnes de ce chemin n\'est pas dans Paramètres › Tags de visages (%s).', $u['name'], str_replace('|', ' › ', $p), implode(', ', tagmanager_reserved_roots())),
+        'fix' => tagmanager_t('Solution : « Séparer » donne un autre nom au tag ordinaire (la personne garde « %s ») ; ou ajouter la racine dans les Paramètres puis relancer l\'indexation.', $u['name']),
+        'photos' => $u['sample_image_id'] ? array(array('id' => (int)$u['sample_image_id'], 'file' => (string)$u['file'], 'frames' => array($u['name']))) : array(),
+        'act' => 'split', 'target' => $u['name'] . ' (tag)', 'conf' => 'faible');
+    }
   }
 
   // Tag inscrit comme visage par face_tag alors que ses fichiers le rangent ailleurs, sans personne de ce
@@ -849,7 +1030,180 @@ SELECT t.id, t.name,
     }
   }
 
+  // Tag de visage attaché dans Piwigo à des photos dont le fichier n'a ni cadre ni chemin à ce nom
+  // (contrôle des visages de l'indexation, voir tagmanager_face_check_batch())
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FACE_CHECKS_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) > 0)
+  {
+    if (function_exists('tagmanager_ensure_face_checks_table'))
+    {
+      tagmanager_ensure_face_checks_table(); // colonne « frames » ajoutée en 1.7a.4
+    }
+    // nombre de photos par tag et par statut (face = cadre ; path = chemin de personne sans cadre ; none = rien)
+    $count = array();
+    foreach (query2array('
+SELECT c.tag_id, c.status, COUNT(*) AS n
+  FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c
+    JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = c.image_id AND it.tag_id = c.tag_id
+  GROUP BY c.tag_id, c.status
+;') as $p)
+    {
+      $count[(int)$p['tag_id']][$p['status']] = (int)$p['n'];
+    }
+    $registry = array_flip(tagmanager_face_registry_ids());
+    $roots = tagmanager_reserved_roots();
+    $by_tag = array();
+    foreach (query2array('
+SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
+  FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c
+    JOIN ' . TAGS_TABLE . ' t ON t.id = c.tag_id
+    JOIN ' . IMAGES_TABLE . ' i ON i.id = c.image_id
+    JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = c.image_id AND it.tag_id = c.tag_id
+  WHERE c.status IN (\'none\', \'path\')
+  ORDER BY t.name, c.image_id
+;') as $f)
+    {
+      $k = (int)$f['tag_id'];
+      if (!isset($by_tag[$k]))
+      {
+        $by_tag[$k] = array('name' => $f['name'], 'photos' => array());
+      }
+      $by_tag[$k]['photos'][] = array('id' => (int)$f['image_id'], 'file' => $f['file'],
+        'frames' => $f['frames'] === '' ? array() : explode("\t", $f['frames']),
+        'note' => $f['status'] === 'path'
+          ? tagmanager_t('chemin %s › %s, sans cadre', $roots[0], $f['name'])
+          : tagmanager_t('ni cadre ni chemin « %s » dans le fichier', $f['name']));
+    }
+    foreach ($by_tag as $tid => $b)
+    {
+      $n = count($b['photos']);
+      if (isset($over[$tid]))
+      {
+        continue; // déjà signalé plus haut (« marqué visage à tort » d'après le chemin)
+      }
+      $c = isset($count[$tid]) ? $count[$tid] : array();
+      $nf = isset($c['face']) ? $c['face'] : 0;
+      $np = isset($c['path']) ? $c['path'] : 0;
+      $nn = isset($c['none']) ? $c['none'] : 0;
+      // Aucun cadre ni chemin de personne nulle part (cas « macareux » : tag de visage sur une photo dont le seul cadre
+      // s'appelle « @ macareux ») : on propose aussi « Ce n'est pas un visage ».
+      $no_frame_anywhere = $nf === 0 && $np === 0 && isset($registry[$tid]);
+      $parts = array();
+      if ($np > 0)
+      {
+        $parts[] = tagmanager_t('%s photo(s) ont seulement le chemin de personne, sans cadre (personne attribuée dans digiKam sans dessiner son cadre)', $np);
+      }
+      if ($nn > 0)
+      {
+        $parts[] = tagmanager_t('%s photo(s) n\'ont ni cadre ni chemin à ce nom dans le fichier (tag ajouté avec l\'éditeur de Piwigo, ou cadre supprimé)', $nn);
+      }
+      $why = ($nf > 0
+          ? tagmanager_t('« %s » a un cadre de visage sur %s photo(s). Sur les autres :', $b['name'], $nf)
+          : (isset($registry[$tid])
+            ? tagmanager_t('« %s » est un tag de visage (liste de face_tag), mais aucune de ses photos n\'a de cadre à ce nom :', $b['name'])
+            : tagmanager_t('« %s » est le nom d\'un cadre de visage dans un fichier, mais aucune de ses photos dans Piwigo n\'a de cadre à ce nom :', $b['name'])))
+        . ' ' . implode(' ; ', $parts) . '.';
+      $out[] = array('id' => $tid, 'name' => $b['name'], 'n' => $n, 'status' => 'facenone',
+        'chip' => tagmanager_t('visage sans cadre'),
+        'why' => $why,
+        'fix' => $no_frame_anywhere
+          ? tagmanager_t('Solution : sur chaque photo, retirer « %s » dans Piwigo, ou dessiner le cadre « %s ». « Ignorer » : c\'est bien la personne, sans cadre. « Ce n\'est pas un visage » : « %s » est un tag ordinaire, à retirer de la liste des visages (aucun fichier modifié).', $b['name'], $b['name'], $b['name'])
+          : tagmanager_t('Solution : dessiner le cadre « %s » dans digiKam ou face_tag_editor ; si ce n\'est pas la personne, retirer « %s » de la photo dans Piwigo. « Ignorer » : c\'est bien la personne, sans cadre.', $b['name'], $b['name']),
+        'photos' => array_slice($b['photos'], 0, 50),
+        'unface' => $no_frame_anywhere,
+        'act' => 'faceignore', 'target' => '', 'conf' => 'faible');
+    }
+  }
+
+  // Cadres de visage relevés par le contrôle sans tag Piwigo à leur nom, ou dont le tag n'est pas sur la photo
+  // (ex. cadre « @ macareux » et aucun tag « @ macareux » : la personne n'apparaît dans aucune recherche).
+  // État vérifié ici, au moment de l'affichage : un tag créé ou rattaché depuis fait disparaître la ligne.
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FRAME_ISSUES_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) > 0)
+  {
+    if (function_exists('tagmanager_ensure_frame_issues_table'))
+    {
+      tagmanager_ensure_frame_issues_table(); // colonne « src » ajoutée en 1.7a.7
+    }
+    $tag_by_fold = array();
+    $res = pwg_query('SELECT id, name FROM ' . TAGS_TABLE . ';');
+    while ($t = pwg_db_fetch_assoc($res))
+    {
+      $tag_by_fold[tagmanager_fold($t['name'])] = array((int)$t['id'], $t['name']);
+    }
+    $groups = array();
+    foreach (query2array('
+SELECT f.image_id, f.name, i.file, f.src
+  FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' f JOIN ' . IMAGES_TABLE . ' i ON i.id = f.image_id
+  ORDER BY f.name, f.image_id
+;') as $f)
+    {
+      $fk = tagmanager_fold($f['name']);
+      $tag = isset($tag_by_fold[$fk]) ? $tag_by_fold[$fk] : null;
+      if ($f['src'] !== '')
+      {
+        continue; // relevé d'une version de développement (1.7a.7 provisoire), effacé à la prochaine lecture
+      }
+      if ($tag)
+      {
+        $on = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE image_id = ' . (int)$f['image_id'] . ' AND tag_id = ' . $tag[0] . ';'));
+        if ((int)$on[0] > 0)
+        {
+          continue; // rattaché depuis le contrôle
+        }
+      }
+      if (!isset($groups[$fk]))
+      {
+        $groups[$fk] = array('name' => $f['name'], 'tag' => $tag, 'photos' => array());
+      }
+      $groups[$fk]['photos'][] = array('id' => (int)$f['image_id'], 'file' => $f['file'], 'frames' => array($f['name']));
+    }
+    foreach ($groups as $g)
+    {
+      $n = count($g['photos']);
+      // Nom proche dans Piwigo : faute de frappe dans le cadre (« Claude Chevalier » / « Claude Chevallier »)
+      $near = '';
+      if (!$g['tag'])
+      {
+        $best = 0;
+        $fk = tagmanager_fold($g['name']);
+        foreach ($tag_by_fold as $k => $t)
+        {
+          if (abs(strlen($k) - strlen($fk)) > 4) { continue; }
+          similar_text($fk, $k, $pct);
+          if ($pct > $best) { $best = $pct; $near = $t[1]; }
+        }
+        if ($best < 85) { $near = ''; }
+      }
+      $out[] = array('id' => $g['tag'] ? $g['tag'][0] : 0, 'name' => $g['name'], 'n' => $n, 'status' => 'framenotag',
+        'chip' => $g['tag'] ? tagmanager_t('cadre non rattaché') : tagmanager_t('cadre sans tag'),
+        'why' => ($g['tag']
+          ? tagmanager_t('%s photo(s) ont un cadre de visage « %s », mais le tag « %s » n\'est pas attaché à ces photos dans Piwigo : la personne n\'y est pas retrouvée par les recherches.', $n, $g['name'], $g['tag'][1])
+          : tagmanager_t('%s photo(s) ont un cadre de visage « %s », mais Piwigo n\'a aucun tag « %s » : la personne n\'est retrouvée par aucune recherche.', $n, $g['name'], $g['name']))
+          . ($near !== '' ? ' ' . tagmanager_t('Nom proche dans Piwigo : « %s » (faute de frappe dans le cadre ?).', $near) : ''),
+        'fix' => tagmanager_t('Solution : resynchroniser les métadonnées de ces photos dans Piwigo (Gestion par lot › action « Synchroniser les métadonnées »), ou ouvrir la photo avec face_tag, qui crée et attache le tag ; si le nom du cadre est une erreur, le corriger dans digiKam ou face_tag_editor.'),
+        'photos' => array_slice($g['photos'], 0, 50),
+        'act' => 'none', 'target' => '', 'conf' => 'faible');
+    }
+  }
+
   return $out;
+}
+
+/**
+ * « Ignorer » sur une ligne « visage sans cadre » : ces photos portent bien la personne, sans cadre.
+ * Seul le statut du contrôle change (aucun fichier, aucun tag) ; il reste ignoré aux contrôles suivants.
+ */
+function tagmanager_face_ignore($tag_id)
+{
+  $tag_id = (int)$tag_id;
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FACE_CHECKS_TABLE)) . '\';');
+  if ($tag_id <= 0 || pwg_db_num_rows($r) === 0)
+  {
+    return array('ok' => false, 'error' => tagmanager_t('Rien à ignorer.'));
+  }
+  pwg_query('UPDATE ' . TAGMANAGER_FACE_CHECKS_TABLE . ' SET status = \'ignored\' WHERE tag_id = ' . $tag_id . ' AND status IN (\'none\', \'path\');');
+  return array('ok' => true, 'n' => pwg_db_changes());
 }
 
 /**
@@ -872,13 +1226,32 @@ function tagmanager_face_unflag($tag_id)
     return array('ok' => false, 'error' => tagmanager_t('Aucune liste de visages (face_tag / face_tag_editor non installé) : rien à corriger.'));
   }
   $over = tagmanager_face_registry_overridden();
-  if (!isset($over[$tag_id]))
+  // Autre cas accepté : le contrôle des visages n'a trouvé, sur aucune photo du tag, ni cadre ni chemin de personne
+  $no_face = false;
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FACE_CHECKS_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) > 0)
+  {
+    $c = pwg_db_fetch_assoc(pwg_query('
+SELECT SUM(c.status IN (\'face\', \'path\')) AS pos, SUM(c.status = \'none\') AS neg
+  FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c
+    JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = c.image_id AND it.tag_id = c.tag_id
+  WHERE c.tag_id = ' . $tag_id . '
+;'));
+    $no_face = $c && (int)$c['pos'] === 0 && (int)$c['neg'] > 0 && in_array($tag_id, tagmanager_face_registry_ids(), true);
+  }
+  if (!isset($over[$tag_id]) && !$no_face)
   {
     return array('ok' => false, 'error' => tagmanager_t('Ce tag n\'est pas marqué comme visage, ou ses photos ne le rangent pas hors de « Personnes ».'));
   }
   $name = query2array('SELECT name FROM ' . TAGS_TABLE . ' WHERE id = ' . $tag_id . ';', null, 'name');
   $name = $name ? $name[0] : '';
   $scan = tagmanager_usage_scan($tag_id, $name, 300);
+  if (!empty($scan['face']) && $scan['person_path'] === null)
+  {
+    // Cadre de visage à ce nom : c'est une personne, même si son chemin n'est pas sous une racine réservée
+    // (réglage vide ou autre langue : People|…). Rien n'est retiré de la liste des visages.
+    return array('ok' => false, 'error' => tagmanager_t('« %s » a un cadre de visage sur %s photo(s) : c\'est bien une personne. Rien n\'a été retiré de la liste des visages. Si ses chemins ne sont pas sous « %s », ajoutez leur racine dans Paramètres › Tags de visages.', $name, count($scan['face']), implode(', ', tagmanager_reserved_roots())));
+  }
   if (!empty($scan['person']) || !empty($scan['both']))
   {
     tagmanager_ensure_homonym_table();
@@ -895,13 +1268,48 @@ function tagmanager_face_unflag($tag_id)
 // Réglages
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Racine des personnes créée par digiKam selon sa langue (tag « People », contexte « People on your photos »,
+ * core/libs/database/tags/facetags.cpp) : traductions lues dans les catalogues officiels KDE
+ * (websvn.kde.org/trunk/l10n-kf6/<langue>/messages/digikam/digikam.po, 20/11/2026) : fr Personnes, en/ja People,
+ * de Personen, it Persone, es Personas, pt/pt_BR Pessoas, nl Mensen, ca Persones, sv/da Personer, pl Ludzie,
+ * cs Lidé, ru/uk Люди, zh_CN 人物. « Personnes » est aussi écrit en dur par face_tag_editor, quelle que soit la langue.
+ */
+function tagmanager_known_person_roots()
+{
+  return array('Personnes', 'People', 'Personen', 'Persone', 'Personas', 'Pessoas', 'Mensen', 'Persones',
+    'Personer', 'Ludzie', 'Lidé', 'Люди', '人物');
+}
+
+/**
+ * Valeur par défaut du réglage (rien d'enregistré) : $conf['tag_manager_person_roots'] (main.inc.php : français,
+ * anglais, allemand, italien, espagnol ; modifiable dans la configuration locale). Valeur invalide : ces cinq-là.
+ */
+function tagmanager_default_person_roots()
+{
+  global $conf;
+  $out = array();
+  if (isset($conf['tag_manager_person_roots']) && is_array($conf['tag_manager_person_roots']))
+  {
+    foreach ($conf['tag_manager_person_roots'] as $r)
+    {
+      $r = trim((string)$r);
+      if ($r !== '' && strpos($r, '|') === false && !in_array($r, $out, true))
+      {
+        $out[] = substr($r, 0, 255);
+      }
+    }
+  }
+  return !empty($out) ? $out : array('Personnes', 'People', 'Personen', 'Persone', 'Personas');
+}
+
 function tagmanager_settings_defaults()
 {
   return array(
     'original' => false,
     'thumb' => 'large',
     'tw' => 300,
-    'reserved' => array('Personnes'),
+    'reserved' => tagmanager_default_person_roots(),
     'rights' => array(
       array('k' => 'g:TagManager', 'who' => 'TagManager', 'type' => 'Groupe', 'p' => array(1, 0, 0)),
     ),
@@ -921,7 +1329,9 @@ function tagmanager_settings_get()
   $c['thumb'] = (isset($c['thumb']) && in_array($c['thumb'], array('medium', 'large', 'xlarge'), true)) ? $c['thumb'] : $def['thumb'];
   $c['tw'] = isset($c['tw']) ? max(90, min(400, (int)$c['tw'])) : $def['tw'];
   $c['rights'] = (isset($c['rights']) && is_array($c['rights'])) ? $c['rights'] : $def['rights'];
-  $c['reserved'] = (isset($c['reserved']) && is_array($c['reserved'])) ? array_values($c['reserved']) : $def['reserved'];
+  // Liste vide (enregistrée avant 1.7a.1) : « Personnes » par défaut. Sans aucune racine réservée, le plugin
+  // ne reconnaît plus une personne dans les chemins (Personnes|Paul serait un tag ordinaire).
+  $c['reserved'] = (isset($c['reserved']) && is_array($c['reserved']) && !empty($c['reserved'])) ? array_values($c['reserved']) : $def['reserved'];
   return $c;
 }
 
@@ -964,6 +1374,11 @@ function tagmanager_settings_save($input)
     }
   }
 
+  if (empty($reserved))
+  {
+    return array('error' => tagmanager_t('Indiquez au moins une racine pour les tags de visages (par exemple « Personnes ») : sans elle, le plugin ne reconnaît plus les personnes dans les chemins des fichiers. Rien n\'a été enregistré.'));
+  }
+
   $thumb = (isset($in['thumb']) && in_array($in['thumb'], array('medium', 'large', 'xlarge'), true)) ? $in['thumb'] : 'large';
   $tw = isset($in['tw']) ? max(90, min(400, (int)$in['tw'])) : 300;
   $c = array('original' => !empty($in['original']), 'thumb' => $thumb, 'tw' => $tw, 'reserved' => array_values(array_unique($reserved)), 'rights' => $rights);
@@ -982,7 +1397,10 @@ function tagmanager_data_settings()
   $users = query2array('SELECT username FROM ' . USERS_TABLE . ' WHERE id <> ' . $guest . ' ORDER BY username;', null, 'username');
 
   $c = tagmanager_settings_get();
-  return array('original' => $c['original'], 'thumb' => $c['thumb'], 'tw' => $c['tw'], 'reserved' => $c['reserved'], 'rights' => $c['rights'], 'groups' => $groups, 'users' => $users, 'level' => tagmanager_user_level());
+  return array('original' => $c['original'], 'thumb' => $c['thumb'], 'tw' => $c['tw'], 'reserved' => $c['reserved'], 'rights' => $c['rights'], 'groups' => $groups, 'users' => $users, 'level' => tagmanager_user_level(),
+    'face_roots' => tagmanager_face_roots(), 'faces_indexed' => !empty(tagmanager_face_seen_ids()),
+    // choix de la liste déroulante « Ajouter » : racines trouvées dans les fichiers, valeur par défaut, autres langues
+    'known_roots' => array_values(array_unique(array_merge(array_keys(tagmanager_face_roots()), tagmanager_default_person_roots(), tagmanager_known_person_roots()))));
 }
 
 ?>

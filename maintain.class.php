@@ -10,6 +10,9 @@ defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
  * Tables :
  *  - tag_manager_paths     : chemin hiérarchique de chaque tag (cache des fichiers) et groupes vides
  *  - tag_manager_homonyms  : tags ordinaires qui portent le nom d'une personne
+ *  - tag_manager_faces     : tags dont le nom est celui d'un cadre de visage dans un fichier lu
+ *  - tag_manager_face_checks : couples photo + tag de visage déjà contrôlés (cadre présent ou non)
+ *  - tag_manager_frame_issues : cadres de visage sans tag Piwigo, ou dont le tag n'est pas sur la photo
  *  - tag_manager_jobs      : lots d'écriture (journal)
  *  - tag_manager_job_files : une ligne par photo d'un lot
  * Configuration : tag_manager_config.
@@ -22,6 +25,9 @@ class tag_manager_maintain extends PluginMaintain
     return array(
       'paths' => $prefixeTable . 'tag_manager_paths',
       'homonyms' => $prefixeTable . 'tag_manager_homonyms',
+      'faces' => $prefixeTable . 'tag_manager_faces',
+      'face_checks' => $prefixeTable . 'tag_manager_face_checks',
+      'frame_issues' => $prefixeTable . 'tag_manager_frame_issues',
       'jobs' => $prefixeTable . 'tag_manager_jobs',
       'files' => $prefixeTable . 'tag_manager_job_files',
     );
@@ -52,6 +58,36 @@ CREATE TABLE IF NOT EXISTS `' . $t['homonyms'] . '` (
   `sample_image_id` INT UNSIGNED NULL,
   `indexed_at`      INT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
+
+    pwg_query('
+CREATE TABLE IF NOT EXISTS `' . $t['faces'] . '` (
+  `tag_id`          INT UNSIGNED NOT NULL,
+  `sample_image_id` INT UNSIGNED NULL,
+  `indexed_at`      INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
+
+    pwg_query('
+CREATE TABLE IF NOT EXISTS `' . $t['face_checks'] . '` (
+  `image_id`   INT UNSIGNED NOT NULL,
+  `tag_id`     INT UNSIGNED NOT NULL,
+  `status`     VARCHAR(10) NOT NULL DEFAULT \'none\',
+  `checked_at` INT UNSIGNED NOT NULL DEFAULT 0,
+  `frames`     VARCHAR(255) NOT NULL DEFAULT \'\',
+  `rev`        TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`image_id`, `tag_id`),
+  KEY `tag` (`tag_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
+
+    pwg_query('
+CREATE TABLE IF NOT EXISTS `' . $t['frame_issues'] . '` (
+  `image_id`   INT UNSIGNED NOT NULL,
+  `name`       VARCHAR(190) NOT NULL,
+  `tag_id`     INT UNSIGNED NULL,
+  `checked_at` INT UNSIGNED NOT NULL DEFAULT 0,
+  `src`        VARCHAR(8) NOT NULL DEFAULT \'\',
+  PRIMARY KEY (`image_id`, `name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
 
     pwg_query('
@@ -114,7 +150,7 @@ CREATE TABLE IF NOT EXISTS `' . $t['files'] . '` (
     $this->install($new_version, $errors);
   }
 
-  /** Aucune trace : les quatre tables et la configuration. Les fichiers des photos ne sont pas touchés. */
+  /** Aucune trace : les sept tables et la configuration. Les fichiers des photos ne sont pas touchés. */
   function uninstall()
   {
     foreach ($this->tables() as $table)

@@ -331,3 +331,6 @@ body.tm-full{overflow:hidden}
   #tm-app .pane{max-height:420px}
   #tm-app .pane.center{max-height:75vh}
 }
+#tm-app .help.tm-warn{color:var(--warn-f)}
+#tm-app .rec-photos{display:flex;flex-wrap:wrap;gap:2px 12px;margin:0 0 4px}
+#tm-app .rec-photos a{white-space:nowrap}

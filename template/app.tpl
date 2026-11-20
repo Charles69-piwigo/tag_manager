@@ -127,7 +127,13 @@
         <legend id="h-res"><span class="ic yellow"><i class="icon-user"></i></span>{'Tags de visages'|@translate}</legend>
         <ul><li><p class="help" style="margin-top:0">{'Les tags de personnes sont gérés par face_tag_editor et digiKam, pas par ce plugin : ils n’apparaissent nulle part ici et ne sont jamais modifiés. Racines de hiérarchie réservées, séparées par des virgules :'|@translate}</p>
           <input class="fin" id="set-reserved" type="text" autocomplete="off" style="max-width:420px" aria-label="{'Racines réservées'|@translate}">
-          <p class="help">{'Les tags enregistrés comme tags de visage par face_tag_editor sont aussi exclus automatiquement, où qu’ils soient rangés.'|@translate}</p></li></ul>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px">
+            <button type="button" class="btn" id="set-root-add"><i class="icon-plus"></i> {'Ajouter'|@translate}</button>
+            <select class="fin" id="set-root-pick" style="width:auto" aria-label="{'Racine à ajouter'|@translate}"></select>
+          </div>
+          <p class="help">{'Par défaut : le nom que digiKam donne à cette racine en français, anglais, allemand, italien et espagnol (Personnes, People, Personen, Persone, Personas) ; face_tag_editor écrit toujours « Personnes ». La liste déroulante propose les autres langues de digiKam et les racines trouvées dans vos fichiers. Valeur par défaut modifiable dans la configuration locale (variable tag_manager_person_roots).'|@translate}</p>
+          <p class="help" id="set-face-roots" hidden></p>
+          <p class="help">{'Les tags enregistrés comme tags de visage par face_tag_editor sont aussi exclus automatiquement, où qu’ils soient rangés. Un nom qui a un cadre de visage dans un fichier est toujours une personne, quel que soit ce réglage.'|@translate}</p></li></ul>
       </fieldset>
       <fieldset aria-labelledby="h-rights">
         <legend id="h-rights"><span class="ic green"><i class="icon-key"></i></span>{'Droits'|@translate}</legend>

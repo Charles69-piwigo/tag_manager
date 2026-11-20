@@ -11,6 +11,15 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 1.8 - 20/11/2026 - regroupe 1.7a.1 à 1.7a.10
+    modifié : une personne est reconnue comme face_tag le fait, par les cadres de visage du fichier (régions MWG de digiKam / Lightroom / face_tag_editor, régions Microsoft ; seulement les régions qui ont une zone) ; un nom qui a un cadre est caché et protégé comme une personne, même sans face_tag ni face_tag_editor et quelle que soit la racine de son chemin, sauf les homonymes connus (personne et tag ordinaire, ex. « Pic »)
+    modifié : Paramètres › Tags de visages : valeur par défaut Personnes, People, Personen, Persone, Personas (nom de la racine des personnes de digiKam en français, anglais, allemand, italien, espagnol), dans $conf['tag_manager_person_roots'] (modifiable dans la configuration locale) ; liste déroulante et bouton « Ajouter » pour les autres langues de digiKam et les racines trouvées dans les fichiers ; avertissement si le champ ne contient aucune de ces racines ; un champ vide n'est plus accepté
+    corrigé : avec le champ des racines vide, « À réconcilier » listait tous les vrais visages en « marqué visage à tort », et « Ce n'est pas un visage » pouvait retirer une vraie personne de la liste de face_tag ; ce bouton refuse désormais un nom qui a un cadre de visage
+    ajouté : contrôle des visages à l'indexation : chaque photo qui porte un tag de visage est relue (toutes la première fois, ensuite seulement les nouvelles et celles modifiées dans Piwigo, d'après images.lastmodified) ; tables tag_manager_faces, tag_manager_face_checks, tag_manager_frame_issues
+    ajouté : « À réconcilier » : « visage sans cadre » (tag de visage sur une photo sans cadre à ce nom : seulement le chemin de personne, ou rien dans le fichier, ex. tag ajouté avec l'éditeur de Piwigo ; action « Ignorer », et « Ce n'est pas un visage » si aucune photo n'a ce cadre), « cadre sans tag » / « cadre non rattaché » (cadre dont le nom n'a pas de tag dans Piwigo, ou dont le tag n'est pas sur la photo, avec le nom proche en cas de faute de frappe), « personne à vérifier » (nom de cadre rangé aussi sous un chemin ordinaire, avec « Séparer ») ; liens vers les photos concernées et cadres de chaque photo
+    ajouté : onglet Index : bloc « Visages » à côté de l'arbre indexé (affichage seul), avec le résultat du contrôle pour chaque tag de visage
+    modifié : « Séparer » accepte une personne connue seulement par ses cadres (sans chemin)
+
 version 1.7a - 17/11/2026 - regroupe 1.7.1
     corrigé : « Étiqueter › Tags » (clic sur l'onglet, « Inclure les sous-niveaux ») : erreur « <br… is not valid JSON » signalée par un utilisateur ; la vue par tag lisait une ligne par photo, par tag du groupe et par album, ce qui pouvait épuiser la mémoire de PHP sur une grande galerie (cause probable, non reproduite : photodev2 a memory_limit = 1024M) ; désormais une ligne par photo et par album (EXISTS), résultats identiques
     modifié : une réponse du serveur qui n'est pas du JSON affiche le texte de l'erreur PHP (mémoire, délai…) au lieu de « not valid JSON »
@@ -268,6 +277,18 @@ define('TAGMANAGER_PATH', PHPWG_PLUGINS_PATH . TAGMANAGER_ID . '/');
 define('TAGMANAGER_ADMIN', get_root_url() . 'admin.php?page=plugin-' . TAGMANAGER_ID);
 define('TAGMANAGER_PATHS_TABLE', $prefixeTable . 'tag_manager_paths');
 define('TAGMANAGER_HOMONYMS_TABLE', $prefixeTable . 'tag_manager_homonyms');
+define('TAGMANAGER_FACES_TABLE', $prefixeTable . 'tag_manager_faces');
+define('TAGMANAGER_FACE_CHECKS_TABLE', $prefixeTable . 'tag_manager_face_checks');
+define('TAGMANAGER_FRAME_ISSUES_TABLE', $prefixeTable . 'tag_manager_frame_issues');
+
+// Racines de hiérarchie des personnes proposées par défaut (Paramètres › Tags de visages, tant que rien n'est
+// enregistré) : nom que digiKam donne à la racine des visages en français, anglais, allemand, italien, espagnol.
+// Modifiable dans la configuration locale (LocalFiles Editor, local/config/config.inc.php), par exemple :
+//   $conf['tag_manager_person_roots'] = array('Personnes', 'People', 'Mensen');
+if (!isset($conf['tag_manager_person_roots']))
+{
+  $conf['tag_manager_person_roots'] = array('Personnes', 'People', 'Personen', 'Persone', 'Personas');
+}
 define('TAGMANAGER_JOBS_TABLE', $prefixeTable . 'tag_manager_jobs');
 define('TAGMANAGER_JOBFILES_TABLE', $prefixeTable . 'tag_manager_job_files');
 
