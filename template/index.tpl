@@ -29,7 +29,7 @@
 </div>
 
 <div id="tm-app" class="tm-index{if $TM_DARK} dark{/if}">
-<div class="conf" id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}" data-t-faces="{'contrôle des visages :'|@translate}" data-t-facenone="{'sans cadre'|@translate}">
+<div class="conf" id="tm-index" data-url="{$TM_URL}" data-token="{$TM_TOKEN}" data-t-read="{'fichiers lus'|@translate}" data-t-done="{'terminé'|@translate}" data-t-error="{'Erreur :'|@translate}" data-t-faces="{'contrôle des visages :'|@translate}" data-t-facenone="{'tag Piwigo seul'|@translate}">
 
   <fieldset>
     <legend><span class="ic blue"><i class="icon-chart-bar"></i></span>{'Index des chemins de tags'|@translate}</legend>
@@ -90,8 +90,8 @@
       {foreach from=$TM_FACES item=f}
         <li><span class="fn">{$f.name|escape}</span><span class="tm-nb" title="{'photos'|@translate}">{$f.total}</span>
           {if $f.face}<span class="fs">{$f.face} {'avec cadre'|@translate}</span>{/if}
-          {if $f.path}<span class="fs">{$f.path} {'chemin sans cadre'|@translate}</span>{/if}
-          {if $f.none}<span class="fs warn">{$f.none} {'sans cadre'|@translate}</span>{/if}
+          {if $f.path}<span class="fs" title="{'Le fichier porte le mot-clé de la personne, mais aucun cadre de visage à ce nom'|@translate}">{$f.path} {'visage sans cadre'|@translate}</span>{/if}
+          {if $f.none}<span class="fs warn" title="{'Le fichier ne porte ni cadre ni mot-clé à ce nom : le tag n\'existe que dans Piwigo'|@translate}">{$f.none} {'tag Piwigo seul'|@translate}</span>{/if}
           {if $f.ignored}<span class="fs">{$f.ignored} {'ignorée(s)'|@translate}</span>{/if}
           {if $f.other}<span class="fs">{$f.other} {'autre(s)'|@translate}</span>{/if}
         </li>

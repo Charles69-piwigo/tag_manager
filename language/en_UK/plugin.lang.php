@@ -222,13 +222,11 @@ $lang['Les tags enregistrés comme tags de visage par face_tag_editor sont aussi
 $lang['visage sans cadre'] = 'face without region';
 $lang['Rien à ignorer.'] = 'Nothing to ignore.';
 $lang['contrôle des visages :'] = 'face check:';
-$lang['sans cadre'] = 'without region';
 $lang['Il contrôle aussi chaque photo qui porte un tag de visage : la première fois toutes, ensuite seulement les nouvelles et celles dont Piwigo a resynchronisé les métadonnées.'] = 'It also checks every photo that carries a face tag: all of them the first time, then only new ones and those whose metadata Piwigo has synchronised again.';
 $lang['Visages'] = 'Faces';
 $lang['Tags de visage (liste de face_tag et noms qui ont un cadre de visage dans un fichier), avec le résultat du dernier contrôle des photos. Affichage seul : ils ne sont pas gérés par ce plugin.'] = 'Face tags (face_tag\'s list and names that have a face region in a file), with the result of the last photo check. Display only: they are not managed by this plugin.';
 $lang['photos'] = 'photos';
 $lang['avec cadre'] = 'with region';
-$lang['chemin sans cadre'] = 'path without region';
 $lang['ignorée(s)'] = 'ignored';
 $lang['autre(s)'] = 'other';
 $lang['Aucun tag de visage.'] = 'No face tag.';
@@ -241,10 +239,6 @@ $lang['%s photo(s) ont un cadre de visage « %s », mais le tag « %s » n\'est 
 $lang['%s photo(s) ont un cadre de visage « %s », mais Piwigo n\'a aucun tag « %s » : la personne n\'est retrouvée par aucune recherche.'] = '%s photo(s) have a face region “%s”, but Piwigo has no tag “%s”: no search finds the person.';
 $lang['Solution : resynchroniser les métadonnées de ces photos dans Piwigo (Gestion par lot › action « Synchroniser les métadonnées »), ou ouvrir la photo avec face_tag, qui crée et attache le tag ; si le nom du cadre est une erreur, le corriger dans digiKam ou face_tag_editor.'] = 'Solution: synchronise the metadata of these photos again in Piwigo (Batch manager › action “Synchronize metadata”), or open the photo with face_tag, which creates and attaches the tag; if the region name is a mistake, fix it in digiKam or face_tag_editor.';
 $lang['Nom proche dans Piwigo : « %s » (faute de frappe dans le cadre ?).'] = 'Similar name in Piwigo: “%s” (typo in the region?).';
-$lang['chemin %s › %s, sans cadre'] = 'path %s › %s, no region';
-$lang['ni cadre ni chemin « %s » dans le fichier'] = 'no region and no path “%s” in the file';
-$lang['%s photo(s) ont seulement le chemin de personne, sans cadre (personne attribuée dans digiKam sans dessiner son cadre)'] = '%s photo(s) only have the person path, no region (person assigned in digiKam without drawing the region)';
-$lang['%s photo(s) n\'ont ni cadre ni chemin à ce nom dans le fichier (tag ajouté avec l\'éditeur de Piwigo, ou cadre supprimé)'] = '%s photo(s) have no region and no path of that name in the file (tag added with Piwigo\'s editor, or region deleted)';
 $lang['« %s » a un cadre de visage sur %s photo(s). Sur les autres :'] = '“%s” has a face region on %s photo(s). On the others:';
 $lang['« %s » est un tag de visage (liste de face_tag), mais aucune de ses photos n\'a de cadre à ce nom :'] = '“%s” is a face tag (face_tag\'s list), but none of its photos has a region with that name:';
 $lang['« %s » est le nom d\'un cadre de visage dans un fichier, mais aucune de ses photos dans Piwigo n\'a de cadre à ce nom :'] = '“%s” is the name of a face region in a file, but none of its photos in Piwigo has a region with that name:';
@@ -252,5 +246,12 @@ $lang['Solution : dessiner le cadre « %s » dans digiKam ou face_tag_editor ; s
 $lang['Racine à ajouter'] = 'Root to add';
 $lang['Ajouter'] = 'Add';
 $lang['Par défaut : le nom que digiKam donne à cette racine en français, anglais, allemand, italien et espagnol (Personnes, People, Personen, Persone, Personas) ; face_tag_editor écrit toujours « Personnes ». La liste déroulante propose les autres langues de digiKam et les racines trouvées dans vos fichiers. Valeur par défaut modifiable dans la configuration locale (variable tag_manager_person_roots).'] = 'Default: the name digiKam gives this root in French, English, German, Italian and Spanish (Personnes, People, Personen, Persone, Personas); face_tag_editor always writes “Personnes”. The drop-down list offers digiKam\'s other languages and the roots found in your files. The default value can be changed in the local configuration (variable tag_manager_person_roots).';
+$lang['Le fichier porte le mot-clé de la personne, mais aucun cadre de visage à ce nom'] = 'The file has the person\'s keyword, but no face region with this name';
+$lang['Le fichier ne porte ni cadre ni mot-clé à ce nom : le tag n\'existe que dans Piwigo'] = 'The file has neither a region nor a keyword with this name: the tag only exists in Piwigo';
+$lang['tag Piwigo seul'] = 'Piwigo tag only';
+$lang['visage sans cadre : mot-clé %s › %s seul'] = 'face without region: keyword %s › %s only';
+$lang['tag Piwigo seul : ni cadre ni mot-clé « %s » dans le fichier'] = 'Piwigo tag only: neither region nor keyword “%s” in the file';
+$lang['%s photo(s) : visage sans cadre (le fichier n\'a que le mot-clé de la personne)'] = '%s photo(s): face without region (the file only has the person\'s keyword)';
+$lang['%s photo(s) : tag Piwigo seul (ni cadre ni mot-clé à ce nom dans le fichier : tag ajouté avec l\'éditeur de Piwigo, ou cadre supprimé)'] = '%s photo(s): Piwigo tag only (neither region nor keyword with this name in the file: tag added with the Piwigo editor, or region removed)';
 
 ?>

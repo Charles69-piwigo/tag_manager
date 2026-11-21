@@ -1071,8 +1071,8 @@ SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
       $by_tag[$k]['photos'][] = array('id' => (int)$f['image_id'], 'file' => $f['file'],
         'frames' => $f['frames'] === '' ? array() : explode("\t", $f['frames']),
         'note' => $f['status'] === 'path'
-          ? tagmanager_t('chemin %s › %s, sans cadre', $roots[0], $f['name'])
-          : tagmanager_t('ni cadre ni chemin « %s » dans le fichier', $f['name']));
+          ? tagmanager_t('visage sans cadre : mot-clé %s › %s seul', $roots[0], $f['name'])
+          : tagmanager_t('tag Piwigo seul : ni cadre ni mot-clé « %s » dans le fichier', $f['name']));
     }
     foreach ($by_tag as $tid => $b)
     {
@@ -1091,11 +1091,11 @@ SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
       $parts = array();
       if ($np > 0)
       {
-        $parts[] = tagmanager_t('%s photo(s) ont seulement le chemin de personne, sans cadre (personne attribuée dans digiKam sans dessiner son cadre)', $np);
+        $parts[] = tagmanager_t('%s photo(s) : visage sans cadre (le fichier n\'a que le mot-clé de la personne)', $np);
       }
       if ($nn > 0)
       {
-        $parts[] = tagmanager_t('%s photo(s) n\'ont ni cadre ni chemin à ce nom dans le fichier (tag ajouté avec l\'éditeur de Piwigo, ou cadre supprimé)', $nn);
+        $parts[] = tagmanager_t('%s photo(s) : tag Piwigo seul (ni cadre ni mot-clé à ce nom dans le fichier : tag ajouté avec l\'éditeur de Piwigo, ou cadre supprimé)', $nn);
       }
       $why = ($nf > 0
           ? tagmanager_t('« %s » a un cadre de visage sur %s photo(s). Sur les autres :', $b['name'], $nf)

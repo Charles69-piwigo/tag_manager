@@ -225,9 +225,8 @@ define('TAGMANAGER_NS_MPREG', 'http://ns.microsoft.com/photo/1.2/t/Region#');
  * Les régions MWG de type BarCode ou Focus ne sont pas des visages.
  *
  * Un cadre n'est compté que s'il a une zone (MWG : mwg-rs:Area ; Microsoft : MPReg:Rectangle), comme face_tag :
- * digiKam écrit aussi, pour une personne attribuée sans cadre, une entrée Microsoft avec le nom SEUL (cas réel,
- * photo n° 214023 : « Rosine Chevalier » sans rectangle, à côté des cadres d'Alain, Annie et Charles). Ce n'est
- * pas un cadre de visage.
+ * une entrée qui porte un nom SEUL n'est pas un cadre de visage (cas réel, photo n° 214023 : « Rosine Chevalier »
+ * sans rectangle, à côté des cadres d'Alain, Annie et Charles ; logiciel d'origine non établi).
  *
  * @return string[] noms distincts (orthographe du fichier), régions MWG puis Microsoft
  */
@@ -345,7 +344,7 @@ function tagmanager_parse_faces_detail($xmp)
     $owner = ($n instanceof DOMAttr) ? $n->ownerElement : $n->parentNode;
     if (!tagmanager_region_has($owner, TAGMANAGER_NS_MPREG, 'Rectangle'))
     {
-      continue; // nom sans rectangle : personne attribuée sans cadre (digiKam), pas un cadre
+      continue; // nom sans rectangle : pas un cadre de visage
     }
     $add_mp($n instanceof DOMAttr ? $n->value : $n->textContent);
   }
