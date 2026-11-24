@@ -24,6 +24,24 @@ define('TAGMANAGER_MAX_STRUCT_FILES', 30000);
 // Outils
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * 1.8.8 : nom de tag (dernier niveau) trop long pour l'IPTC. Le mot-clé IPTC 2:25 est limité à 64 octets ;
+ * quand Piwigo lit ses tags dans ce champ, une synchronisation des métadonnées recrée le tag sous un nom coupé
+ * (cas réel « 2019 CAMBODGE - 04 … Phnom Krom (Siem »). Rien à signaler si Piwigo ne lit pas l'IPTC.
+ * @return string|null message d'erreur, null si le nom convient
+ */
+function tagmanager_iptc_name_error($n)
+{
+  global $conf;
+  $n = trim((string)$n);
+  if (empty($conf['use_iptc']) || !isset($conf['use_iptc_mapping']['keywords'])
+    || $conf['use_iptc_mapping']['keywords'] !== '2#025' || strlen($n) <= 64)
+  {
+    return null;
+  }
+  return tagmanager_t('Le nom fait %s octets : Piwigo lit les tags dans les mots-clés IPTC, limités à 64 octets, et une synchronisation des métadonnées le couperait. Raccourcissez-le (une lettre accentuée compte pour 2 octets).', strlen($n));
+}
+
 /** @return string|null message d'erreur, null si le nom est valable */
 function tagmanager_valid_name($n)
 {
@@ -370,7 +388,7 @@ function tagmanager_struct_plan(array $ops)
         if ($type === 'rename')
         {
           $new = trim(isset($op['name']) ? (string)$op['name'] : '');
-          if (($e = tagmanager_valid_name($new)) !== null) { $err(tagmanager_t('« %s » : %s', $tname, $e)); break; }
+          if (($e = tagmanager_valid_name($new)) !== null || ($e = tagmanager_iptc_name_error($new)) !== null) { $err(tagmanager_t('« %s » : %s', $tname, $e)); break; }
           if ($new === $tname) { $err(tagmanager_t('« %s » : le nom est inchangé.', $tname)); break; }
           if (($other = $name_taken($new, $t['id'])) !== null) { $err(tagmanager_t('« %s » : %s', $tname, tagmanager_name_taken_msg($new, $other))); break; }
           $to = $t['ok'] ? array_merge(array_slice(explode('|', $t['path']), 0, -1), array($new)) : array($new);
@@ -441,7 +459,7 @@ function tagmanager_struct_plan(array $ops)
         $t = $map[$tname];
         if ($t['reserved']) { $err(tagmanager_t('« %s » : tag de visage, géré par face_tag_editor et digiKam.', $tname)); break; }
         $new = trim(isset($op['name']) ? (string)$op['name'] : '');
-        if (($e = tagmanager_valid_name($new)) !== null) { $err(tagmanager_t('Nouveau nom : %s', $e)); break; }
+        if (($e = tagmanager_valid_name($new)) !== null || ($e = tagmanager_iptc_name_error($new)) !== null) { $err(tagmanager_t('Nouveau nom : %s', $e)); break; }
         if (tagmanager_norm_cmp($new) === tagmanager_norm_cmp($tname)) { $err(tagmanager_t('Choisissez un nom différent de « %s ».', $tname)); break; }
         if (($other = $name_taken($new, -1)) !== null) { $err(tagmanager_name_taken_msg($new, $other)); break; }
         $total = (int)pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE tag_id = ' . intval($t['id']) . ';'))[0];
@@ -924,7 +942,7 @@ function tagmanager_tag_create($parent, $name)
   include_once(PHPWG_ROOT_PATH . 'admin/include/functions.php');
 
   $name = trim($name);
-  if (($e = tagmanager_valid_name($name)) !== null) { return array('ok' => false, 'error' => $e); }
+  if (($e = tagmanager_valid_name($name)) !== null || ($e = tagmanager_iptc_name_error($name)) !== null) { return array('ok' => false, 'error' => $e); }
   $parent = trim($parent);
   if ($parent === '') { return array('ok' => false, 'error' => tagmanager_t('Choisissez un groupe d\'accueil.')); }
   if (tagmanager_is_reserved_root($parent)) { return array('ok' => false, 'error' => tagmanager_t('Ce groupe est réservé aux tags de visage.')); }

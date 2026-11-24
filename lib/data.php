@@ -866,6 +866,12 @@ SELECT t.id, t.name, p.status, p.sample_image_id,
     }
     $name = $r['name'];
     $n = (int)$r['n'];
+    // 1.8.8 : un tag attaché à aucune photo n'a rien à réconcilier (aucun fichier ne le porte) ; il est rangé
+    // dans « (sans photo) », où on peut le supprimer (cas réel : ancien tag tronqué « …(Siem » après renommage)
+    if ($n === 0)
+    {
+      continue;
+    }
     $row = array('id' => (int)$r['id'], 'name' => $name, 'n' => $n, 'status' => $r['status'],
       'why' => '', 'act' => 'skip', 'target' => '', 'conf' => 'faible');
 
@@ -1052,6 +1058,9 @@ SELECT c.tag_id, c.status, COUNT(*) AS n
     }
     $registry = array_flip(tagmanager_face_registry_ids());
     $roots = tagmanager_reserved_roots();
+    // 1.8.5 : photos dont le cadre porte une autre orthographe que Piwigo confond avec ce tag (même nom d'URL,
+    // ex. cadre « Anne-Marie », tag « Anne Marie ») : signalées une seule fois, plus bas (« deux orthographes »)
+    $url_twins = tagmanager_frame_url_twins();
     $by_tag = array();
     foreach (query2array('
 SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
@@ -1064,6 +1073,14 @@ SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
 ;') as $f)
     {
       $k = (int)$f['tag_id'];
+      if (isset($url_twins['pair'][(int)$f['image_id'] . '|' . $k]))
+      {
+        if (isset($count[$k][$f['status']]))
+        {
+          $count[$k][$f['status']]--;
+        }
+        continue;
+      }
       if (!isset($by_tag[$k]))
       {
         $by_tag[$k] = array('name' => $f['name'], 'photos' => array());
@@ -1132,6 +1149,8 @@ SELECT c.tag_id, t.name, c.image_id, i.file, c.frames, c.status
       $tag_by_fold[tagmanager_fold($t['name'])] = array((int)$t['id'], $t['name']);
     }
     $groups = array();
+    $twin_groups = array();
+    $url_twins = isset($url_twins) ? $url_twins : tagmanager_frame_url_twins();
     foreach (query2array('
 SELECT f.image_id, f.name, i.file, f.src
   FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' f JOIN ' . IMAGES_TABLE . ' i ON i.id = f.image_id
@@ -1151,6 +1170,18 @@ SELECT f.image_id, f.name, i.file, f.src
         {
           continue; // rattaché depuis le contrôle
         }
+      }
+      elseif (isset($url_twins['frame'][(int)$f['image_id'] . '|' . $fk]))
+      {
+        // 1.8.5 : Piwigo range ce cadre sous un tag d'une autre orthographe (même nom d'URL)
+        $tw = $url_twins['frame'][(int)$f['image_id'] . '|' . $fk];
+        $gk = 'url|' . $fk . '|' . $tw[0];
+        if (!isset($twin_groups[$gk]))
+        {
+          $twin_groups[$gk] = array('name' => $f['name'], 'tag' => $tw, 'photos' => array());
+        }
+        $twin_groups[$gk]['photos'][] = array('id' => (int)$f['image_id'], 'file' => $f['file'], 'frames' => array($f['name']));
+        continue;
       }
       if (!isset($groups[$fk]))
       {
@@ -1185,8 +1216,69 @@ SELECT f.image_id, f.name, i.file, f.src
         'photos' => array_slice($g['photos'], 0, 50),
         'act' => 'none', 'target' => '', 'conf' => 'faible');
     }
+    foreach ($twin_groups as $g)
+    {
+      $n = count($g['photos']);
+      $out[] = array('id' => $g['tag'][0], 'name' => $g['name'], 'n' => $n, 'status' => 'framenotag',
+        'chip' => tagmanager_t('deux orthographes'),
+        'why' => tagmanager_t('%s photo(s) ont un cadre de visage « %s », alors que la personne s\'appelle « %s » dans Piwigo. Piwigo confond les deux orthographes (il remplace les caractères spéciaux pour former le nom d\'URL du tag, ici « %s ») et range ce cadre sous « %s » : la photo y paraît juste. Pour digiKam et les fichiers, ce sont deux personnes différentes.', $n, $g['name'], $g['tag'][1], $g['tag'][2], $g['tag'][1]),
+        'fix' => tagmanager_t('Solution : renommer le tag « %s » en « %s » dans Piwigo (Photos › Tags) : le cadre et le tag portent alors le même nom. Si d\'autres photos ont un cadre « %s », garder plutôt une seule orthographe dans digiKam (fusionner les deux personnes), puis écrire les métadonnées dans les fichiers.', $g['tag'][1], $g['name'], $g['tag'][1]),
+        'photos' => array_slice($g['photos'], 0, 50),
+        'act' => 'none', 'target' => '', 'conf' => 'faible');
+    }
   }
 
+  return $out;
+}
+
+/**
+ * 1.8.5 : cadres de visage dont le nom n'a pas de tag Piwigo à la même orthographe (comparaison sans casse ni
+ * accents) mais dont Piwigo trouve un tag par le nom d'URL, comme tag_id_from_tag_name() : il remplace les
+ * caractères spéciaux (render_tag_url / str2url), « Anne-Marie » et « Anne Marie » donnent « anne-marie ».
+ * Seulement si ce tag est attaché à la photo (Piwigo a bien rangé le cadre sous ce tag).
+ * @return array frame : « image|nom replié » => array(id, nom, url_name) du tag ; pair : « image|tag » => true
+ */
+function tagmanager_frame_url_twins()
+{
+  $out = array('frame' => array(), 'pair' => array());
+  $r = pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string(str_replace('_', '\\_', TAGMANAGER_FRAME_ISSUES_TABLE)) . '\';');
+  if (pwg_db_num_rows($r) === 0)
+  {
+    return $out;
+  }
+  $fold = array();
+  $url = array();
+  $res = pwg_query('SELECT id, name, url_name FROM ' . TAGS_TABLE . ';');
+  while ($t = pwg_db_fetch_assoc($res))
+  {
+    $fold[tagmanager_fold($t['name'])] = true;
+    if ($t['url_name'] !== '' && !isset($url[$t['url_name']]))
+    {
+      $url[$t['url_name']] = array((int)$t['id'], $t['name'], $t['url_name']);
+    }
+  }
+  $issues = query2array('SELECT image_id, name FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' WHERE src = \'\';');
+  foreach ($issues as $f)
+  {
+    $fk = tagmanager_fold($f['name']);
+    if (isset($fold[$fk]))
+    {
+      continue; // même orthographe : cas ordinaire (cadre non rattaché)
+    }
+    $u = trigger_change('render_tag_url', trim($f['name']));
+    if (!isset($url[$u]))
+    {
+      continue;
+    }
+    $tag = $url[$u];
+    $on = pwg_db_fetch_row(pwg_query('SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' WHERE image_id = ' . (int)$f['image_id'] . ' AND tag_id = ' . $tag[0] . ';'));
+    if ((int)$on[0] === 0)
+    {
+      continue;
+    }
+    $out['frame'][(int)$f['image_id'] . '|' . $fk] = $tag;
+    $out['pair'][(int)$f['image_id'] . '|' . $tag[0]] = true;
+  }
   return $out;
 }
 

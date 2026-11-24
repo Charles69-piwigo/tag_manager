@@ -70,13 +70,16 @@ function tagmanager_ajax($public)
     // --- indexation (onglet Index de l'administration) ---
     case 'index_start':
       $admin_only();
-      $reply(array('run' => time(), 'total' => tagmanager_count_index_tags()));
+      // 1.8.4 : mode update (seulement les tags qui ont pu changer) ou full (tous)
+      $reply(tagmanager_index_start((isset($_POST['mode']) && $_POST['mode'] === 'update') ? 'update' : 'full'));
 
     case 'index_batch':
       $admin_only();
       $reply(tagmanager_index_batch(
         isset($_POST['last_id']) ? intval($_POST['last_id']) : 0,
-        isset($_POST['run']) ? intval($_POST['run']) : time()
+        isset($_POST['run']) ? intval($_POST['run']) : time(),
+        20,
+        (isset($_POST['mode']) && $_POST['mode'] === 'update') ? 'update' : 'full'
       ));
 
     case 'face_check_start':

@@ -75,7 +75,15 @@ if ($page['tab'] !== 'index')
 else
 {
   $summary = tagmanager_index_summary();
+  // 1.8.4 : dates de la dernière mise à jour et de la dernière indexation complète (avant 1.8.4, chaque
+  // indexation était complète : la date la plus récente de l'index vaut pour les deux)
+  $tm_dates = tagmanager_index_dates();
+  $tm_full = $tm_dates['full'] ? $tm_dates['full'] : ($tm_dates['update'] ? 0 : $summary['last']);
+  $tm_update = max($tm_dates['update'], $tm_full);
   $template->assign(array(
+    'TM_LAST_UPDATE' => $tm_update ? date('d/m/Y H:i', $tm_update) : '',
+    'TM_LAST_FULL' => $tm_full ? date('d/m/Y H:i', $tm_full) : '',
+    'TM_FULL_OLD' => ($tm_full && time() - $tm_full > 30 * 86400),
     'TM_URL' => TAGMANAGER_ADMIN . '&tab=index',
     'TM_DARK' => $tm_dark,
     'TM_ASSETS' => get_root_url() . TAGMANAGER_PATH,

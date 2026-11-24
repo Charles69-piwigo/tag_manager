@@ -15,7 +15,8 @@ defined('PHPWG_ROOT_PATH') or die('Hacking attempt!');
  *  - tag_manager_frame_issues : cadres de visage sans tag Piwigo, ou dont le tag n'est pas sur la photo
  *  - tag_manager_jobs      : lots d'écriture (journal)
  *  - tag_manager_job_files : une ligne par photo d'un lot
- * Configuration : tag_manager_config.
+ * Configuration : tag_manager_config, tag_manager_face_stat_cursor (1.8.3), tag_manager_index_dates et
+ * tag_manager_index_todo (1.8.4).
  */
 class tag_manager_maintain extends PluginMaintain
 {
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS `' . $t['paths'] . '` (
   `sample_image_id` INT UNSIGNED NULL,
   `status`          VARCHAR(16) NOT NULL DEFAULT \'ok\',
   `indexed_at`      INT UNSIGNED NOT NULL DEFAULT 0,
+  `nb_photos`       INT UNSIGNED NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_tag` (`tag_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;');
@@ -158,5 +160,8 @@ CREATE TABLE IF NOT EXISTS `' . $t['files'] . '` (
       pwg_query('DROP TABLE IF EXISTS `' . $table . '`;');
     }
     conf_delete_param('tag_manager_config');
+    conf_delete_param('tag_manager_face_stat_cursor'); // 1.8.3 : reprise de la relecture des dates de fichiers
+    conf_delete_param('tag_manager_index_dates');      // 1.8.4 : dates de la dernière mise à jour / indexation complète
+    conf_delete_param('tag_manager_index_todo');       // 1.8.4 : tags à relire de la mise à jour en cours
   }
 }

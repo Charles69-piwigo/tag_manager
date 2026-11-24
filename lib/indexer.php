@@ -17,6 +17,191 @@ include_once(TAGMANAGER_PATH . 'lib/xmp_reader.php');
 // Nombre maximal de photos testées par tag avant de le déclarer « à plat » ou « introuvable »
 define('TAGMANAGER_SAMPLE', 8);
 
+// ---------------------------------------------------------------------------------------------
+// Indexation incrémentale (1.8.4) : « Mettre à jour l'index » ne relit que les tags qui ont pu changer ;
+// « Tout réindexer » (mode full) relit tous les tags comme avant.
+// ---------------------------------------------------------------------------------------------
+
+/** Colonne nb_photos de la table des chemins (nombre de photos du tag à sa dernière indexation). */
+function tagmanager_ensure_paths_columns()
+{
+  static $done = false;
+  if ($done)
+  {
+    return;
+  }
+  $done = true;
+  $cols = query2array('SHOW COLUMNS FROM `' . TAGMANAGER_PATHS_TABLE . '`;', 'Field', 'Field');
+  if (!isset($cols['nb_photos']))
+  {
+    // NULL = inconnu : le tag sera relu à la prochaine mise à jour
+    pwg_query('ALTER TABLE `' . TAGMANAGER_PATHS_TABLE . '` ADD COLUMN `nb_photos` INT UNSIGNED NULL;');
+  }
+  if (!isset($cols['changed_at']))
+  {
+    // 1.8.6 : date du dernier changement de chemin ou de statut, et statut d'avant (NULL = tag nouveau),
+    // pour le bilan affiché à la fin d'une indexation
+    pwg_query('ALTER TABLE `' . TAGMANAGER_PATHS_TABLE . '` ADD COLUMN `changed_at` INT UNSIGNED NULL, ADD COLUMN `prev_status` VARCHAR(16) NULL;');
+  }
+}
+
+/**
+ * Bilan d'une indexation commencée à $run : chemins changés, nouveaux tags rangés, tags relus restés sans chemin.
+ * @return array changed, placed, flat
+ */
+function tagmanager_index_report($run)
+{
+  $run = intval($run);
+  $row = pwg_db_fetch_assoc(pwg_query('
+SELECT
+  SUM(p.changed_at >= ' . $run . ' AND p.status = \'ok\' AND p.prev_status IS NOT NULL) AS changed,
+  SUM(p.changed_at >= ' . $run . ' AND p.status = \'ok\' AND p.prev_status IS NULL) AS placed,
+  SUM(p.indexed_at >= ' . $run . ' AND p.status <> \'ok\') AS flat
+  FROM ' . TAGMANAGER_PATHS_TABLE . ' p
+    JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
+  WHERE p.kind = \'tag\' AND ' . tagmanager_sql_not_reserved('p.path', 'p.tag_id') . '
+;'));
+  return array('changed' => (int)$row['changed'], 'placed' => (int)$row['placed'], 'flat' => (int)$row['flat']);
+}
+
+/** Dates des dernières indexations : array('update' => horodatage, 'full' => horodatage). */
+function tagmanager_index_dates()
+{
+  global $conf;
+  $d = isset($conf['tag_manager_index_dates']) ? json_decode($conf['tag_manager_index_dates'], true) : null;
+  return array(
+    'update' => (is_array($d) && !empty($d['update'])) ? (int)$d['update'] : 0,
+    'full' => (is_array($d) && !empty($d['full'])) ? (int)$d['full'] : 0,
+  );
+}
+
+function tagmanager_index_dates_save($mode, $ts)
+{
+  $d = tagmanager_index_dates();
+  $d['update'] = $ts; // une indexation complète met aussi l'index à jour
+  if ($mode === 'full')
+  {
+    $d['full'] = $ts;
+  }
+  conf_update_param('tag_manager_index_dates', json_encode($d), true);
+}
+
+/**
+ * Tags à relire par une mise à jour, avec la raison de chacun (première raison trouvée) :
+ *   new     : tag jamais indexé ;
+ *   count   : nombre de photos différent de la dernière indexation (photos ajoutées, supprimées, tag posé
+ *             ou retiré dans Piwigo) ; aussi un tag indexé avant 1.8.4 (nombre inconnu) ;
+ *   file    : le fichier de la photo témoin a changé (dans Piwigo : images.lastmodified ; sur le disque :
+ *             date du fichier), ou cette photo n'existe plus ;
+ *   nopath  : tag sans chemin (à plat, fichier introuvable) dont une photo a changé dans Piwigo.
+ * @return array todo (identifiants), reasons (raison => nombre), all (tags examinés)
+ */
+function tagmanager_index_plan_update()
+{
+  @set_time_limit(300);
+  tagmanager_ensure_paths_columns();
+  $out = array('todo' => array(), 'reasons' => array('new' => 0, 'count' => 0, 'file' => 0, 'nopath' => 0), 'all' => 0);
+
+  $nopath_changed = array_flip(query2array('
+SELECT DISTINCT it.tag_id
+  FROM ' . IMAGE_TAG_TABLE . ' it
+    JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id
+    JOIN ' . TAGMANAGER_PATHS_TABLE . ' p ON p.tag_id = it.tag_id AND p.kind = \'tag\'
+  WHERE p.status <> \'ok\' AND UNIX_TIMESTAMP(i.lastmodified) > p.indexed_at
+;', null, 'tag_id'));
+
+  $res = pwg_query('
+SELECT t.id, n.nb, p.status, p.nb_photos, p.indexed_at, p.sample_image_id,
+       si.id AS sid, si.path AS spath, UNIX_TIMESTAMP(si.lastmodified) AS smod
+  FROM ' . TAGS_TABLE . ' t
+    JOIN (SELECT tag_id, COUNT(*) AS nb FROM ' . IMAGE_TAG_TABLE . ' GROUP BY tag_id) n ON n.tag_id = t.id
+    LEFT JOIN ' . TAGMANAGER_PATHS_TABLE . ' p ON p.tag_id = t.id AND p.kind = \'tag\'
+    LEFT JOIN ' . IMAGES_TABLE . ' si ON si.id = p.sample_image_id
+  ORDER BY t.id
+;');
+  while ($r = pwg_db_fetch_assoc($res))
+  {
+    $out['all']++;
+    $reason = null;
+    if ($r['status'] === null)
+    {
+      $reason = 'new';
+    }
+    elseif ($r['nb_photos'] === null || (int)$r['nb_photos'] !== (int)$r['nb'])
+    {
+      $reason = 'count';
+    }
+    elseif ($r['status'] === 'ok')
+    {
+      if ($r['sid'] === null)
+      {
+        $reason = 'file'; // photo témoin supprimée (ou inconnue)
+      }
+      elseif ((int)$r['smod'] > (int)$r['indexed_at'])
+      {
+        $reason = 'file';
+      }
+      else
+      {
+        $mtime = @filemtime(PHPWG_ROOT_PATH . $r['spath']);
+        if ($mtime !== false && $mtime > (int)$r['indexed_at'])
+        {
+          $reason = 'file';
+        }
+      }
+    }
+    elseif (isset($nopath_changed[$r['id']]))
+    {
+      $reason = 'nopath';
+    }
+    if ($reason !== null)
+    {
+      $out['todo'][] = (int)$r['id'];
+      $out['reasons'][$reason]++;
+    }
+  }
+  return $out;
+}
+
+/**
+ * Début d'une indexation.
+ * @param string $mode 'update' (mise à jour) ou 'full' (tout réindexer)
+ * @return array run, mode, total (tags à lire), all (tags examinés), reasons (mise à jour seulement)
+ */
+function tagmanager_index_start($mode)
+{
+  tagmanager_ensure_paths_columns();
+  $run = time();
+  if ($mode !== 'update')
+  {
+    conf_delete_param('tag_manager_index_todo');
+    $n = tagmanager_count_index_tags();
+    return array('run' => $run, 'mode' => 'full', 'total' => $n, 'all' => $n);
+  }
+  // Première mise à jour après 1.8.4 : aucune date enregistrée ; la dernière indexation (complète, avant
+  // 1.8.4) est la date la plus récente de l'index, lue AVANT que cette mise à jour ne la change
+  $d = tagmanager_index_dates();
+  if (!$d['full'])
+  {
+    $sum = tagmanager_index_summary();
+    if ($sum['last'])
+    {
+      conf_update_param('tag_manager_index_dates', json_encode(array('update' => $d['update'], 'full' => (int)$sum['last'])), true);
+    }
+  }
+  $p = tagmanager_index_plan_update();
+  conf_update_param('tag_manager_index_todo', implode(',', $p['todo']), true);
+  return array('run' => $run, 'mode' => 'update', 'total' => count($p['todo']), 'all' => $p['all'], 'reasons' => $p['reasons']);
+}
+
+/** Liste des tags à relire de la mise à jour en cours. */
+function tagmanager_index_todo()
+{
+  global $conf;
+  $s = isset($conf['tag_manager_index_todo']) ? trim($conf['tag_manager_index_todo']) : '';
+  return ($s === '') ? array() : array_map('intval', explode(',', $s));
+}
+
 /** Forme de comparaison d'un nom : comme Piwigo, sans casse ni accents (voir names.php). */
 function tagmanager_norm($s)
 {
@@ -73,10 +258,12 @@ SELECT t.id, t.name, p.path
 function tagmanager_upsert_tag_path($tag_id, $path, $image_id, $status, $now)
 {
   pwg_query('
-INSERT INTO ' . TAGMANAGER_PATHS_TABLE . ' (kind, tag_id, path, sample_image_id, status, indexed_at)
+INSERT INTO ' . TAGMANAGER_PATHS_TABLE . ' (kind, tag_id, path, sample_image_id, status, indexed_at, changed_at)
 VALUES (\'tag\', ' . intval($tag_id) . ', \'' . pwg_db_real_escape_string($path) . '\', '
-  . ($image_id ? intval($image_id) : 'NULL') . ', \'' . pwg_db_real_escape_string($status) . '\', ' . intval($now) . ')
+  . ($image_id ? intval($image_id) : 'NULL') . ', \'' . pwg_db_real_escape_string($status) . '\', ' . intval($now) . ', ' . intval($now) . ')
 ON DUPLICATE KEY UPDATE
+  prev_status = IF(BINARY path <> BINARY VALUES(path) OR status <> VALUES(status), status, prev_status),
+  changed_at = IF(BINARY path <> BINARY VALUES(path) OR status <> VALUES(status), VALUES(changed_at), changed_at),
   path = VALUES(path),
   sample_image_id = VALUES(sample_image_id),
   status = VALUES(status),
@@ -152,9 +339,12 @@ function tagmanager_has_normal_path($tag_id)
  * @param int $limit   nombre de tags examinés par lot
  * @return array processed, last_id, done, ok, flat, nofile, reads
  */
-function tagmanager_index_batch($last_id, $run, $limit = 20)
+function tagmanager_index_batch($last_id, $run, $limit = 20, $mode = 'full')
 {
   @set_time_limit(60);
+  tagmanager_ensure_paths_columns();
+  $update = ($mode === 'update');
+  $todo = $update ? tagmanager_index_todo() : array();
 
   $by_name = array();
   $name_of = array();
@@ -172,7 +362,8 @@ function tagmanager_index_batch($last_id, $run, $limit = 20)
 SELECT t.id, t.name
   FROM ' . TAGS_TABLE . ' t
   WHERE t.id > ' . intval($last_id) . '
-    AND EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)' . '
+    AND EXISTS (SELECT 1 FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id)'
+    . ($update ? ' AND t.id IN (' . (empty($todo) ? '0' : implode(',', $todo)) . ')' : '') . '
   ORDER BY t.id
   LIMIT ' . intval($limit) . '
 ;');
@@ -183,7 +374,31 @@ SELECT t.id, t.name
 
   tagmanager_ensure_homonym_table();
   tagmanager_ensure_faces_table();
-  if (intval($last_id) === 0)
+  if (intval($last_id) === 0 && $update)
+  {
+    // Mise à jour : seuls les tags relus perdent leurs homonymes (retrouvés par la lecture qui suit ou par
+    // le contrôle des visages) ; les « noms vus en cadre » sont gardés (une personne vue dans un fichier non
+    // relu doit le rester), sauf ceux des tags supprimés de Piwigo
+    if (!empty($todo))
+    {
+      foreach (array_chunk($todo, 500) as $chunk)
+      {
+        pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' WHERE tag_id IN (' . implode(',', $chunk) . ');');
+      }
+    }
+    pwg_query('
+DELETE h FROM ' . TAGMANAGER_HOMONYMS_TABLE . ' h LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = h.tag_id WHERE t.id IS NULL
+;');
+    pwg_query('
+DELETE f FROM ' . TAGMANAGER_FACES_TABLE . ' f LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = f.tag_id WHERE t.id IS NULL
+;');
+    pwg_query('
+DELETE p FROM ' . TAGMANAGER_PATHS_TABLE . ' p
+  LEFT JOIN ' . TAGS_TABLE . ' t ON t.id = p.tag_id
+  WHERE p.kind = \'tag\' AND t.id IS NULL
+;');
+  }
+  elseif (intval($last_id) === 0)
   {
     pwg_query('DELETE FROM ' . TAGMANAGER_HOMONYMS_TABLE . ';'); // début d'une indexation : on repart de zéro
     pwg_query('DELETE FROM ' . TAGMANAGER_FACES_TABLE . ';');
@@ -339,7 +554,28 @@ SELECT id, path
     }
   }
 
+  // Nombre de photos de chaque tag examiné : la mise à jour suivante relit le tag s'il change
+  $seen = array();
+  foreach ($tags as $tag)
+  {
+    $seen[] = (int)$tag['id'];
+  }
+  if (!empty($seen))
+  {
+    pwg_query('
+UPDATE ' . TAGMANAGER_PATHS_TABLE . ' p
+  SET p.nb_photos = (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = p.tag_id)
+  WHERE p.kind = \'tag\' AND p.tag_id IN (' . implode(',', $seen) . ')
+;');
+  }
+
   $out['done'] = count($tags) < $limit;
+  if ($out['done'])
+  {
+    tagmanager_index_dates_save($update ? 'update' : 'full', (int)$run);
+    conf_delete_param('tag_manager_index_todo');
+    $out['report'] = tagmanager_index_report($run);
+  }
   return $out;
 }
 
@@ -401,10 +637,27 @@ function tagmanager_face_check_tag_ids()
   return array_keys($ids);
 }
 
+/**
+ * 1.8.6 : condition SQL « vraie photo » (alias $a = images). Les vidéos, PDF, TIFF… (fichier hors
+ * $conf['picture_ext'], ou image représentative dans pwg_representative/) ne sont pas contrôlés : le fichier
+ * lu serait la vidéo ou le PDF, qui n'a ni cadre ni mot-clé lisible, et ils apparaissaient en « tag Piwigo seul ».
+ */
+function tagmanager_face_check_photo_sql($a = 'i')
+{
+  global $conf;
+  $ext = array();
+  foreach ((isset($conf['picture_ext']) ? $conf['picture_ext'] : array('jpg', 'jpeg', 'png', 'gif', 'webp')) as $e)
+  {
+    $ext[] = '\'' . pwg_db_real_escape_string(strtolower($e)) . '\'';
+  }
+  return $a . '.representative_ext IS NULL AND LOWER(SUBSTRING_INDEX(' . $a . '.path, \'.\', -1)) IN (' . implode(',', $ext) . ')';
+}
+
 /** Condition SQL « couple à (re)lire » (alias it = image_tag, i = images, c = contrôles). */
 function tagmanager_face_check_pending_sql(array $tag_ids)
 {
   return 'it.tag_id IN (' . implode(',', $tag_ids) . ')
+    AND ' . tagmanager_face_check_photo_sql('i') . '
     AND (c.image_id IS NULL
       OR (c.status <> \'ignored\' AND c.rev < ' . TAGMANAGER_FACE_CHECK_REV . ')
       OR (c.status <> \'ignored\' AND UNIX_TIMESTAMP(i.lastmodified) > c.checked_at))';
@@ -412,6 +665,57 @@ function tagmanager_face_check_pending_sql(array $tag_ids)
   // métadonnées, édition…) ; date_metadata_update ne garde que le JOUR : une synchronisation faite le jour même du
   // contrôle n'était pas vue (cas « Georges Algérie », 20/11/2026). Une photo simplement vue (compteur « hit ») est
   // aussi relue : coût faible.
+}
+
+/**
+ * 1.8.3 : fichiers modifiés hors de Piwigo (digiKam, Synology Drive…) depuis leur dernier contrôle. Piwigo ne
+ * change images.lastmodified qu'à sa propre synchronisation : sans elle, un fichier corrigé ailleurs gardait
+ * son ancien résultat (cas réel : cadres « Chevalier » renommés « Chevallier » dans digiKam, 22/11/2026).
+ * La date du fichier sur le disque est comparée à celle du contrôle ; un couple concerné est remis à la
+ * révision 0, donc relu par le contrôle qui suit. Une lecture de date par photo ; arrêt au bout de
+ * TAGMANAGER_FACE_STAT_BUDGET secondes, la suite au contrôle suivant (curseur tag_manager_face_stat_cursor).
+ * @return int nombre de photos remises à relire
+ */
+define('TAGMANAGER_FACE_STAT_BUDGET', 20);
+function tagmanager_face_check_mark_changed_files()
+{
+  global $conf;
+  $cursor = isset($conf['tag_manager_face_stat_cursor']) ? (int)$conf['tag_manager_face_stat_cursor'] : 0;
+  $rows = query2array('
+SELECT c.image_id, MIN(c.checked_at) AS checked_at, i.path
+  FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c JOIN ' . IMAGES_TABLE . ' i ON i.id = c.image_id
+  WHERE c.status <> \'ignored\' AND c.rev >= ' . TAGMANAGER_FACE_CHECK_REV . '
+  GROUP BY c.image_id, i.path
+  ORDER BY (c.image_id <= ' . $cursor . '), c.image_id
+;');
+  $start = microtime(true);
+  $changed = array();
+  $last = 0;
+  $complete = true;
+  foreach ($rows as $r)
+  {
+    if (microtime(true) - $start > TAGMANAGER_FACE_STAT_BUDGET)
+    {
+      $complete = false;
+      break;
+    }
+    $last = (int)$r['image_id'];
+    $mtime = @filemtime(PHPWG_ROOT_PATH . $r['path']);
+    if ($mtime !== false && $mtime > (int)$r['checked_at'])
+    {
+      $changed[] = $last;
+    }
+  }
+  conf_update_param('tag_manager_face_stat_cursor', $complete ? 0 : $last, true);
+  foreach (array_chunk($changed, 500) as $chunk)
+  {
+    pwg_query('
+UPDATE ' . TAGMANAGER_FACE_CHECKS_TABLE . '
+  SET rev = 0
+  WHERE status <> \'ignored\' AND image_id IN (' . implode(',', $chunk) . ')
+;');
+  }
+  return count($changed);
 }
 
 /** Chemin de personne à afficher pour un homonyme trouvé par le contrôle. */
@@ -439,7 +743,13 @@ function tagmanager_face_check_start()
   pwg_query('
 DELETE f FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' f
   LEFT JOIN ' . IMAGES_TABLE . ' i ON i.id = f.image_id
-  WHERE i.id IS NULL
+  WHERE i.id IS NULL OR NOT (' . tagmanager_face_check_photo_sql('i') . ')
+;');
+  // 1.8.6 : résultats des vidéos, PDF… contrôlés par les versions précédentes
+  pwg_query('
+DELETE c FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c
+  JOIN ' . IMAGES_TABLE . ' i ON i.id = c.image_id
+  WHERE NOT (' . tagmanager_face_check_photo_sql('i') . ')
 ;');
   $ids = tagmanager_face_check_tag_ids();
   if (empty($ids))
@@ -453,6 +763,12 @@ DELETE c FROM ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c
   LEFT JOIN ' . IMAGE_TAG_TABLE . ' it ON it.image_id = c.image_id AND it.tag_id = c.tag_id
   WHERE it.image_id IS NULL
 ;');
+  tagmanager_face_check_mark_changed_files();
+  // 1.8.7 : les couples en anomalie (« visage sans cadre », « tag Piwigo seul ») sont relus à chaque contrôle.
+  // Renommer un tag dans Piwigo ne change ni le fichier ni la photo : sans cela, l'ancien résultat restait
+  // (cas P1240001.JPG, tag renommé « Anne-Marie »). Révision 0 = relu une fois par ce contrôle.
+  pwg_query('UPDATE ' . TAGMANAGER_FACE_CHECKS_TABLE . ' SET rev = 0 WHERE status IN (\'none\', \'path\');');
+  tagmanager_frame_issues_refresh_orphans(); // 1.8.9
   $now = time();
   foreach (query2array('
 SELECT c.tag_id, MIN(c.image_id) AS image_id, t.name
@@ -482,7 +798,8 @@ function tagmanager_face_check_batch()
   @set_time_limit(60);
   tagmanager_ensure_face_checks_table();
   tagmanager_ensure_homonym_table();
-  $out = array('processed' => 0, 'reads' => 0, 'none' => 0, 'done' => true);
+  $out = array('processed' => 0, 'reads' => 0, 'none' => 0, 'done' => true,
+    'path_new' => 0, 'path_gone' => 0, 'none_new' => 0, 'none_gone' => 0); // 1.8.6 : changements, pour le bilan
   $ids = tagmanager_face_check_tag_ids();
   if (empty($ids))
   {
@@ -571,6 +888,11 @@ SELECT it.image_id, it.tag_id, t.name, c.status
         }
       }
       if ($st === 'none') { $out['none']++; }
+      foreach (array('path', 'none') as $k)
+      {
+        if ($p['status'] !== $k && $st === $k) { $out[$k . '_new']++; }
+        if ($p['status'] === $k && $st !== $k) { $out[$k . '_gone']++; }
+      }
       if ($st === 'normal')
       {
         tagmanager_record_homonym($p['tag_id'], tagmanager_face_check_person_path($p['tag_id'], $p['name']), $img['id'], $now);
@@ -622,6 +944,74 @@ VALUES ' . implode(', ', $issues) . '
 }
 
 /**
+ * 1.8.9 : photos dont des cadres sont en anomalie mais qui ne portent plus aucun tag de visage contrôlé. Le
+ * contrôle ne lit que les photos qui ont un tag de visage : sans cette relecture, leur ligne restait dans
+ * « À réconcilier » même après correction (cas réel 166217 « @ macareux » : cadre et tag retirés, ligne toujours là).
+ * Relues à chaque contrôle (liste courte) : un tag ajouté ou retiré dans Piwigo ne change pas le fichier.
+ * Même relevé que tagmanager_face_check_batch().
+ * @return int nombre de photos relues
+ */
+function tagmanager_frame_issues_refresh_orphans()
+{
+  $imgs = query2array('
+SELECT DISTINCT i.id, i.path
+  FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' f
+    JOIN ' . IMAGES_TABLE . ' i ON i.id = f.image_id
+    LEFT JOIN ' . TAGMANAGER_FACE_CHECKS_TABLE . ' c ON c.image_id = f.image_id
+  WHERE c.image_id IS NULL
+;');
+  if (empty($imgs))
+  {
+    return 0;
+  }
+  $ids = array();
+  foreach ($imgs as $img)
+  {
+    $ids[] = (int)$img['id'];
+  }
+  $tag_by_fold = array();
+  $res = pwg_query('SELECT id, name FROM ' . TAGS_TABLE . ';');
+  while ($t = pwg_db_fetch_assoc($res))
+  {
+    $tag_by_fold[tagmanager_fold($t['name'])] = (int)$t['id'];
+  }
+  $attached = array();
+  foreach (query2array('SELECT image_id, tag_id FROM ' . IMAGE_TAG_TABLE . ' WHERE image_id IN (' . implode(',', $ids) . ');') as $a)
+  {
+    $attached[(int)$a['image_id']][(int)$a['tag_id']] = true;
+  }
+  $now = time();
+  foreach ($imgs as $img)
+  {
+    $meta = tagmanager_read_hierarchy_faces(tagmanager_resolve_path($img['path']));
+    if ($meta === null)
+    {
+      continue; // fichier illisible : l'ancien relevé est gardé
+    }
+    pwg_query('DELETE FROM ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' WHERE image_id = ' . (int)$img['id'] . ';');
+    $issues = array();
+    foreach ($meta['faces'] as $fn)
+    {
+      $fk = tagmanager_fold($fn);
+      $tid = isset($tag_by_fold[$fk]) ? $tag_by_fold[$fk] : 0;
+      if ($tid && isset($attached[(int)$img['id']][$tid]))
+      {
+        continue; // cadre et tag présents : normal
+      }
+      $issues[$fk] = '(' . (int)$img['id'] . ', \'' . pwg_db_real_escape_string(substr($fn, 0, 190)) . '\', ' . ($tid ? $tid : 'NULL') . ', ' . $now . ', \'\')';
+    }
+    if (!empty($issues))
+    {
+      pwg_query('
+INSERT IGNORE INTO ' . TAGMANAGER_FRAME_ISSUES_TABLE . ' (image_id, name, tag_id, checked_at, src)
+VALUES ' . implode(', ', $issues) . '
+;');
+    }
+  }
+  return count($imgs);
+}
+
+/**
  * Cadres de visage relevés par le contrôle dont le nom n'a pas de tag dans Piwigo (tag_id NULL : la personne
  * n'apparaît dans aucune recherche) ou dont le tag existe mais n'est pas sur la photo.
  * Table créée par 1.7a.6 : les photos déjà contrôlées sont relues une fois pour la remplir.
@@ -665,7 +1055,8 @@ function tagmanager_index_faces()
   }
   $out = array();
   foreach (query2array('
-SELECT t.id, t.name, (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it WHERE it.tag_id = t.id) AS total
+SELECT t.id, t.name, (SELECT COUNT(*) FROM ' . IMAGE_TAG_TABLE . ' it JOIN ' . IMAGES_TABLE . ' i ON i.id = it.image_id
+    WHERE it.tag_id = t.id AND ' . tagmanager_face_check_photo_sql('i') . ') AS total
   FROM ' . TAGS_TABLE . ' t
   WHERE t.id IN (' . implode(',', $ids) . ')
 ;') as $t)
